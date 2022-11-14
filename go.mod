@@ -1,4 +1,4 @@
-module ranger
+module github.com/sudhirj/ranger
 
 go 1.19
 
