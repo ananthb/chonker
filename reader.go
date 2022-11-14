@@ -33,7 +33,7 @@ func (cr *ChannellingReader) Read(p []byte) (n int, err error) {
 	return cr.r.Read(p)
 }
 
-func (cr *ChannellingReader) Close() {
+func (cr *ChannellingReader) Finish() {
 	close(cr.ch)
 }
 
