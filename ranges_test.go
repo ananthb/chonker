@@ -1,11 +1,14 @@
 package ranger
 
-import "testing"
-import "github.com/stretchr/testify/assert"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestSimpleRanger(t *testing.T) {
-	ranger := NewRanger(100, 10)
-	ranges := ranger.Ranges(0)
+	ranger := NewRanger(10)
+	ranges := ranger.Ranges(100, 0)
 	assert.Equal(t, 10, len(ranges))
 	assert.Equal(t, byteRange{from: 0, to: 9}, ranges[0])
 	assert.Equal(t, byteRange{from: 10, to: 19}, ranges[1])
@@ -20,24 +23,24 @@ func TestSimpleRanger(t *testing.T) {
 }
 
 func TestOvershoot(t *testing.T) {
-	ranger := NewRanger(100, 75)
-	ranges := ranger.Ranges(0)
+	ranger := NewRanger(75)
+	ranges := ranger.Ranges(100, 0)
 	assert.Equal(t, 2, len(ranges))
 	assert.Equal(t, byteRange{from: 0, to: 74}, ranges[0])
 	assert.Equal(t, byteRange{from: 75, to: 99}, ranges[1])
 }
 
 func TestOffset(t *testing.T) {
-	ranger := NewRanger(100, 75)
-	ranges := ranger.Ranges(20)
+	ranger := NewRanger(75)
+	ranges := ranger.Ranges(100, 20)
 	assert.Equal(t, 2, len(ranges))
 	assert.Equal(t, byteRange{from: 20, to: 74}, ranges[0])
 	assert.Equal(t, byteRange{from: 75, to: 99}, ranges[1])
 }
 
 func TestOffsetAdvanced(t *testing.T) {
-	ranger := NewRanger(100, 10)
-	ranges := ranger.Ranges(42)
+	ranger := NewRanger(10)
+	ranges := ranger.Ranges(100, 42)
 	assert.Equal(t, 6, len(ranges))
 	assert.Equal(t, byteRange{from: 42, to: 49}, ranges[0])
 	assert.Equal(t, byteRange{from: 50, to: 59}, ranges[1])
@@ -46,8 +49,8 @@ func TestOffsetAdvanced(t *testing.T) {
 
 func TestHeader(t *testing.T) {
 	// Needs to use the format `bytes=0-50`
-	ranger := NewRanger(100, 10)
-	ranges := ranger.Ranges(0)
+	ranger := NewRanger(10)
+	ranges := ranger.Ranges(100, 0)
 	assert.Equal(t, byteRange{from: 0, to: 9}, ranges[0])
 	assert.Equal(t, "bytes=0-9", ranges[0].Header())
 	assert.Equal(t, byteRange{from: 10, to: 19}, ranges[1])

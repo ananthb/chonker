@@ -8,6 +8,7 @@ type ChannellingReader struct {
 	ch chan<- io.Reader
 	r  io.Reader
 	w  io.Writer
+	io.ReadCloser
 }
 
 func NewChannellingReader(bufferSize int) *ChannellingReader {
@@ -39,4 +40,8 @@ func (cr *ChannellingReader) Finish() {
 
 func (cr *ChannellingReader) Send(r io.Reader) {
 	cr.ch <- r
+}
+
+func (cr *ChannellingReader) Close() error {
+	return nil
 }

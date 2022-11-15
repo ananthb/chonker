@@ -14,16 +14,15 @@ func (r byteRange) Header() string {
 }
 
 type Ranger struct {
-	length    int64
 	chunkSize int64
 }
 
-func (r Ranger) Ranges(offset int64) []byteRange {
+func (r Ranger) Ranges(length int64, offset int64) []byteRange {
 	ranges := make([]byteRange, 0)
-	for runningOffset := int64(0); runningOffset < r.length; runningOffset += r.chunkSize {
+	for runningOffset := int64(0); runningOffset < length; runningOffset += r.chunkSize {
 		br := byteRange{
 			from: runningOffset,
-			to:   min(runningOffset+r.chunkSize-1, r.length-1),
+			to:   min(runningOffset+r.chunkSize-1, length-1),
 		}
 		if offset > br.to {
 			continue
@@ -36,6 +35,6 @@ func (r Ranger) Ranges(offset int64) []byteRange {
 	return ranges
 }
 
-func NewRanger(length int64, chunkSize int64) Ranger {
-	return Ranger{length: length, chunkSize: chunkSize}
+func NewRanger(chunkSize int64) Ranger {
+	return Ranger{chunkSize: chunkSize}
 }
