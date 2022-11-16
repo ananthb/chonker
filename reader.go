@@ -11,9 +11,9 @@ type ChannellingReader struct {
 	io.ReadCloser
 }
 
-func NewChannellingReader(bufferSize int) *ChannellingReader {
+func NewChannellingReader() *ChannellingReader {
 	r, w := io.Pipe()
-	ch := make(chan io.Reader, bufferSize)
+	ch := make(chan io.Reader)
 	go func() {
 		for rCurrent := range ch {
 			_, _ = io.Copy(w, rCurrent)

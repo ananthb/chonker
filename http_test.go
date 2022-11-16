@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"testing"
 	"time"
 
@@ -17,6 +18,9 @@ func TestBasicDownload(t *testing.T) {
 	content := make([]byte, 10000)
 	rand.Read(content)
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		//time.Sleep(2 * time.Second)
+		dumpRequest, _ := httputil.DumpRequest(request, false)
+		t.Log(time.Now(), string(dumpRequest))
 		http.ServeContent(writer, request, "", time.Time{}, bytes.NewReader(content))
 	}))
 	rangerClient := NewRangingHTTPClient(NewRanger(1000), http.DefaultClient)

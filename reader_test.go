@@ -13,7 +13,7 @@ func TestBasicChanneledReading(t *testing.T) {
 	two := strings.NewReader("two")
 	three := strings.NewReader("three")
 
-	chanReader := NewChannellingReader(0)
+	chanReader := NewChannellingReader()
 
 	go func() {
 		chanReader.Send(one)
