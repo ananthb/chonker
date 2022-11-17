@@ -17,7 +17,7 @@ type Ranger struct {
 	chunkSize int64
 }
 
-func (r Ranger) Ranges(length int64, offset int64) []byteRange {
+func (r Ranger) ranges(length int64, offset int64) []byteRange {
 	ranges := make([]byteRange, 0)
 	for runningOffset := int64(0); runningOffset < length; runningOffset += r.chunkSize {
 		br := byteRange{

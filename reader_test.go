@@ -16,10 +16,10 @@ func TestBasicChanneledReading(t *testing.T) {
 	chanReader := NewChannellingReader()
 
 	go func() {
-		chanReader.Send(one)
-		chanReader.Send(two)
-		chanReader.Send(three)
-		chanReader.Finish()
+		chanReader.WriteFrom(one)
+		chanReader.WriteFrom(two)
+		chanReader.WriteFrom(three)
+		chanReader.FinishWriting()
 	}()
 	bytes, _ := io.ReadAll(chanReader)
 	assert.Equal(t, []byte("onetwothree"), bytes)

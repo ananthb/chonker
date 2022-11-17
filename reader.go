@@ -16,10 +16,13 @@ func NewChannellingReader() *ChannellingReader {
 	ch := make(chan io.Reader)
 	go func() {
 		for rCurrent := range ch {
-			_, _ = io.Copy(w, rCurrent)
+			_, err := io.Copy(w, rCurrent)
+			panicIfErr(err)
 			if rc, ok := rCurrent.(io.ReadCloser); ok {
-				_ = rc.Close()
+				err = rc.Close()
+				panicIfErr(err)
 			}
+
 		}
 		_ = w.Close()
 	}()
@@ -34,11 +37,11 @@ func (cr *ChannellingReader) Read(p []byte) (n int, err error) {
 	return cr.r.Read(p)
 }
 
-func (cr *ChannellingReader) Finish() {
+func (cr *ChannellingReader) FinishWriting() {
 	close(cr.ch)
 }
 
-func (cr *ChannellingReader) Send(r io.Reader) {
+func (cr *ChannellingReader) WriteFrom(r io.Reader) {
 	cr.ch <- r
 }
 

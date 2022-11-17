@@ -1,7 +1,10 @@
 package ranger
 
 import (
+	"github.com/sudhirj/cirque"
+	"io"
 	"net/http"
+	"net/http/httputil"
 )
 
 // HTTPClient provides an interface allowing us to perform HTTP requests.
@@ -13,26 +16,38 @@ type HTTPClient interface {
 type RangingHTTPClient struct {
 	client HTTPClient
 	ranger Ranger
+	httputil.BufferPool
 	HTTPClient
 }
 
 func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	headReq, err := http.NewRequest("HEAD", req.URL.String(), nil)
-	noErr(err)
+	panicIfErr(err)
 	headResp, err := rhc.client.Do(headReq)
-	noErr(err)
-	ranges := rhc.ranger.Ranges(headResp.ContentLength, 0)
-	cr := NewChannellingReader()
+	panicIfErr(err)
+	ranges := rhc.ranger.ranges(headResp.ContentLength, 0)
+	combinedReader := NewChannellingReader()
+	rangeInputs, readerOutputs := cirque.NewCirque(2, func(i byteRange) io.ReadCloser {
+		partReq, err := http.NewRequest("GET", req.URL.String(), nil)
+		panicIfErr(err)
+		partReq.Header.Set("Range", i.Header())
+		partResp, err := rhc.client.Do(partReq)
+		panicIfErr(err)
+		return partResp.Body
+	})
 
 	go func() {
-		for _, r := range ranges {
-			partReq, err := http.NewRequest("GET", req.URL.String(), nil)
-			partReq.Header.Set("Range", r.Header())
-			partResp, err := rhc.client.Do(partReq)
-			noErr(err)
-			cr.Send(partResp.Body)
+		for r := range readerOutputs {
+			combinedReader.WriteFrom(r)
 		}
-		cr.Finish()
+		combinedReader.FinishWriting()
+	}()
+
+	go func() {
+		for _, br := range ranges {
+			rangeInputs <- br
+		}
+		close(rangeInputs)
 	}()
 
 	combinedResponse := &http.Response{
@@ -42,7 +57,7 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		ProtoMajor:       0,
 		ProtoMinor:       0,
 		Header:           nil,
-		Body:             cr,
+		Body:             combinedReader,
 		ContentLength:    headResp.ContentLength,
 		TransferEncoding: nil,
 		Close:            false,
@@ -51,20 +66,14 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		Request:          req,
 		TLS:              nil,
 	}
-	noErr(err)
-	return combinedResponse, nil
+	panicIfErr(err)
 
+	return combinedResponse, nil
 }
 
 func NewRangingHTTPClient(ranger Ranger, client HTTPClient) RangingHTTPClient {
 	return RangingHTTPClient{
 		ranger: ranger,
 		client: client,
-	}
-}
-
-func noErr(err error) {
-	if err != nil {
-		panic(err)
 	}
 }
