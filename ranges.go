@@ -13,6 +13,10 @@ func (r byteRange) Header() string {
 	return fmt.Sprintf("bytes=%v-%v", r.from, r.to)
 }
 
+func (r byteRange) length() int {
+	return int(r.to - r.from + 1)
+}
+
 type Ranger struct {
 	chunkSize int64
 }

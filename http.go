@@ -1,10 +1,12 @@
 package ranger
 
 import (
-	"github.com/sudhirj/cirque"
+	"bytes"
 	"io"
 	"net/http"
 	"net/http/httputil"
+
+	"github.com/sudhirj/cirque"
 )
 
 // HTTPClient provides an interface allowing us to perform HTTP requests.
@@ -27,13 +29,19 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	panicIfErr(err)
 	ranges := rhc.ranger.ranges(headResp.ContentLength, 0)
 	combinedReader := NewChannellingReader()
-	rangeInputs, readerOutputs := cirque.NewCirque(2, func(i byteRange) io.ReadCloser {
+	rangeInputs, readerOutputs := cirque.NewCirque(2, func(br byteRange) io.Reader {
 		partReq, err := http.NewRequest("GET", req.URL.String(), nil)
 		panicIfErr(err)
-		partReq.Header.Set("Range", i.Header())
+		partReq.Header.Set("Range", br.Header())
 		partResp, err := rhc.client.Do(partReq)
 		panicIfErr(err)
-		return partResp.Body
+		buf := new(bytes.Buffer)
+		buf.Grow(br.length())
+		_, err = buf.ReadFrom(partResp.Body)
+		panicIfErr(err)
+		err = partResp.Body.Close()
+		panicIfErr(err)
+		return buf
 	})
 
 	go func() {
@@ -51,20 +59,11 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	}()
 
 	combinedResponse := &http.Response{
-		Status:           "200 OK",
-		StatusCode:       200,
-		Proto:            "",
-		ProtoMajor:       0,
-		ProtoMinor:       0,
-		Header:           nil,
-		Body:             combinedReader,
-		ContentLength:    headResp.ContentLength,
-		TransferEncoding: nil,
-		Close:            false,
-		Uncompressed:     false,
-		Trailer:          nil,
-		Request:          req,
-		TLS:              nil,
+		Status:        "200 OK",
+		StatusCode:    200,
+		Body:          combinedReader,
+		ContentLength: headResp.ContentLength,
+		Request:       req,
 	}
 	panicIfErr(err)
 
