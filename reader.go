@@ -4,47 +4,46 @@ import (
 	"io"
 )
 
-type ChannellingReader struct {
-	ch chan<- io.Reader
-	r  io.Reader
-	w  io.Writer
-	io.ReadCloser
+type ChannelReader struct {
+	inputs chan io.Reader
+	r      io.Reader
+	w      io.Writer
+	io.Reader
 }
 
-func NewChannellingReader() *ChannellingReader {
+func NewChannelReader() *ChannelReader {
 	r, w := io.Pipe()
-	ch := make(chan io.Reader)
-	go func() {
-		for rCurrent := range ch {
-			_, err := io.Copy(w, rCurrent)
-			panicIfErr(err)
-			if rc, ok := rCurrent.(io.ReadCloser); ok {
-				err = rc.Close()
-				panicIfErr(err)
-			}
+	cr := &ChannelReader{
+		inputs: make(chan io.Reader),
+		r:      r,
+		w:      w,
+	}
+	go cr.Run()
+	return cr
+}
 
+func (cr *ChannelReader) Run() {
+	for currentReader := range cr.inputs {
+		_, err := io.Copy(cr.w, currentReader)
+		panicIfErr(err) // TODO switch to context?
+		if rc, ok := currentReader.(io.ReadCloser); ok {
+			_ = rc.Close()
 		}
-		_ = w.Close()
-	}()
-	return &ChannellingReader{
-		ch: ch,
-		r:  r,
-		w:  w,
+
+	}
+	if wc, ok := cr.w.(io.WriteCloser); ok {
+		_ = wc.Close()
 	}
 }
 
-func (cr *ChannellingReader) Read(p []byte) (n int, err error) {
+func (cr *ChannelReader) Read(p []byte) (n int, err error) {
 	return cr.r.Read(p)
 }
 
-func (cr *ChannellingReader) FinishWriting() {
-	close(cr.ch)
+func (cr *ChannelReader) Inputs() chan<- io.Reader {
+	return cr.inputs
 }
 
-func (cr *ChannellingReader) WriteFrom(r io.Reader) {
-	cr.ch <- r
-}
-
-func (cr *ChannellingReader) Close() error {
-	return nil
+func (cr *ChannelReader) Close() {
+	close(cr.inputs)
 }
