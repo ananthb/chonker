@@ -8,6 +8,7 @@ type ChannelReader struct {
 	inputs chan io.Reader
 	r      io.Reader
 	w      io.Writer
+	curr   io.Reader
 	io.Reader
 }
 
@@ -17,27 +18,29 @@ func NewChannelReader() *ChannelReader {
 		inputs: make(chan io.Reader),
 		r:      r,
 		w:      w,
+		curr:   nil,
 	}
-	go cr.Run()
 	return cr
 }
 
-func (cr *ChannelReader) Run() {
-	for currentReader := range cr.inputs {
-		_, err := io.Copy(cr.w, currentReader)
-		panicIfErr(err) // TODO switch to context?
-		if rc, ok := currentReader.(io.ReadCloser); ok {
-			_ = rc.Close()
-		}
-
-	}
-	if wc, ok := cr.w.(io.WriteCloser); ok {
-		_ = wc.Close()
-	}
-}
-
 func (cr *ChannelReader) Read(p []byte) (n int, err error) {
-	return cr.r.Read(p)
+	if cr.curr == nil {
+		// we're at the beginning (or the end)
+		cr.curr = <-cr.inputs
+	}
+	if cr.curr == nil {
+		// still nil? we're done, input channel was closed
+		return 0, io.EOF
+	}
+
+	n, err = cr.curr.Read(p)
+
+	if err == io.EOF {
+		// this reader is done, let's move to the next one
+		cr.curr = <-cr.inputs
+		return n, nil
+	}
+	return
 }
 
 func (cr *ChannelReader) Inputs() chan<- io.Reader {
