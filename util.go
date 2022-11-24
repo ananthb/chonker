@@ -8,9 +8,3 @@ func min[T constraints.Ordered](a T, b T) T {
 	}
 	return b
 }
-
-func panicIfErr(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
