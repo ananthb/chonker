@@ -23,7 +23,7 @@ func TestBasicDownload(t *testing.T) {
 		t.Log(time.Now(), string(dumpRequest))
 		http.ServeContent(writer, request, "", time.Time{}, bytes.NewReader(content))
 	}))
-	rangerClient := NewRangingHTTPClient(NewRanger(1000), http.DefaultClient)
+	rangerClient := NewRangingHTTPClient(NewRanger(1000), http.DefaultClient, 10)
 	req, err := http.NewRequest("GET", server.URL, nil)
 	assert.Nil(t, err)
 	response, err := rangerClient.Do(req)

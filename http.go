@@ -14,8 +14,9 @@ type HTTPClient interface {
 
 // RangingHTTPClient wraps another HTTP client to issue all requests based on the Ranges provided.
 type RangingHTTPClient struct {
-	client HTTPClient
-	ranger Ranger
+	client      HTTPClient
+	ranger      Ranger
+	parallelism int
 	HTTPClient
 }
 
@@ -56,7 +57,7 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		}
 
 		return buf
-	})
+	}, rhc.parallelism)
 
 	combinedResponse := &http.Response{
 		Status:        "200 OK",
@@ -78,9 +79,10 @@ func (rhc RangingHTTPClient) getContentLength(req *http.Request) (int64, error) 
 	return headResp.ContentLength, err
 }
 
-func NewRangingHTTPClient(ranger Ranger, client HTTPClient) RangingHTTPClient {
+func NewRangingHTTPClient(ranger Ranger, client HTTPClient, parallelism int) RangingHTTPClient {
 	return RangingHTTPClient{
-		ranger: ranger,
-		client: client,
+		ranger:      ranger,
+		client:      client,
+		parallelism: parallelism,
 	}
 }

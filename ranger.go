@@ -46,12 +46,12 @@ func (r Ranger) Ranges(length int64, offset int64) []ByteRange {
 	return ranges
 }
 
-func (r Ranger) RangedReader(length int64, offset int64, getter func(br ByteRange) io.Reader) io.Reader {
+func (r Ranger) RangedReader(length int64, offset int64, getter func(br ByteRange) io.Reader, parallelism int) io.Reader {
 	cr := NewChannelReader()
 
 	// use cirque to manage an ordered worker pool (order is important because we want
 	// the readers to come out in byte range order, or we'll jumble the data).
-	inputRanges, outputReaders := cirque.NewCirque(3, getter)
+	inputRanges, outputReaders := cirque.NewCirque(int64(parallelism), getter)
 
 	// send byte Ranges as input to the worker pool
 	go func() {
