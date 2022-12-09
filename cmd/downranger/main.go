@@ -36,8 +36,9 @@ var rootCmd = &cobra.Command{
 			resp.ContentLength,
 			"Downloading",
 		)
-		io.Copy(io.MultiWriter(dest, bar), resp.Body)
-		return nil
+		_, err = io.Copy(io.MultiWriter(dest, bar), resp.Body)
+
+		return err
 	},
 }
 

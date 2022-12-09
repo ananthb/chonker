@@ -2,9 +2,8 @@ package ranger
 
 import (
 	"fmt"
-	"io"
-
 	"github.com/sudhirj/cirque"
+	"io"
 )
 
 type ByteRange struct {
@@ -16,8 +15,8 @@ func (r ByteRange) Header() string {
 	return fmt.Sprintf("bytes=%v-%v", r.From, r.To)
 }
 
-func (r ByteRange) Length() int {
-	return int(r.To - r.From + 1)
+func (r ByteRange) Length() int64 {
+	return r.To - r.From + 1
 }
 
 type Ranger struct {

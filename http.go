@@ -46,9 +46,13 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		}
 
 		buf := bytes.NewBuffer(make([]byte, 0, br.Length()))
-		_, err = buf.ReadFrom(partResp.Body)
+		n, err := buf.ReadFrom(partResp.Body)
 		if err != nil {
 			return errorReader{err: fmt.Errorf("error reading the request for segment %v: %w", br.Header(), err)}
+		}
+
+		if n != br.Length() {
+			return errorReader{err: fmt.Errorf("error with received byte count on segment %v: expected %v bytes, but received %v", br.Header(), br.Length(), n)}
 		}
 
 		err = partResp.Body.Close()
