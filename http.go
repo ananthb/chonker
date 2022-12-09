@@ -20,48 +20,43 @@ type RangingHTTPClient struct {
 	HTTPClient
 }
 
-type errorReader struct {
-	err error
-}
-
-func (e errorReader) Read([]byte) (n int, err error) {
-	return 0, e.err
-}
-
 func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	contentLength, err := rhc.getContentLength(req)
 	if err != nil {
 		return nil, fmt.Errorf("error getting content length via HEAD: %w", err)
 	}
-	rangedReader := rhc.ranger.RangedReader(contentLength, 0, func(br ByteRange) io.Reader {
+
+	loader := func(br ByteRange) (io.Reader, error) {
 		partReq, err := http.NewRequest("GET", req.URL.String(), nil)
 		if err != nil {
-			return errorReader{err: fmt.Errorf("error building GET request for segment %v: %w", br.Header(), err)}
+			return nil, fmt.Errorf("error building GET request for segment %v: %w", br.Header(), err)
 		}
 
 		partReq.Header.Set("Range", br.Header())
 		partResp, err := rhc.client.Do(partReq)
 		if err != nil {
-			return errorReader{err: fmt.Errorf("error making the request for segment %v: %w", br.Header(), err)}
+			return nil, fmt.Errorf("error making the request for segment %v: %w", br.Header(), err)
 		}
 
 		buf := bytes.NewBuffer(make([]byte, 0, br.Length()))
 		n, err := buf.ReadFrom(partResp.Body)
 		if err != nil {
-			return errorReader{err: fmt.Errorf("error reading the request for segment %v: %w", br.Header(), err)}
+			return nil, fmt.Errorf("error reading the request for segment %v: %w", br.Header(), err)
 		}
 
 		if n != br.Length() {
-			return errorReader{err: fmt.Errorf("error with received byte count on segment %v: expected %v bytes, but received %v", br.Header(), br.Length(), n)}
+			return nil, fmt.Errorf("error with received byte count on segment %v: expected %v bytes, but received %v", br.Header(), br.Length(), n)
 		}
 
 		err = partResp.Body.Close()
 		if err != nil {
-			return errorReader{err: fmt.Errorf("error closing the request for segment %v: %w", br.Header(), err)}
+			return nil, fmt.Errorf("error closing the request for segment %v: %w", br.Header(), err)
 		}
 
-		return buf
-	}, rhc.parallelism)
+		return buf, nil
+	}
+
+	rangedReader := rhc.ranger.RangedReader(contentLength, 0, loader, rhc.parallelism)
 
 	combinedResponse := &http.Response{
 		Status:        "200 OK",

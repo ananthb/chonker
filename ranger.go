@@ -2,8 +2,9 @@ package ranger
 
 import (
 	"fmt"
-	"github.com/sudhirj/cirque"
 	"io"
+
+	"github.com/sudhirj/cirque"
 )
 
 type ByteRange struct {
@@ -45,12 +46,26 @@ func (r Ranger) Ranges(length int64, offset int64) []ByteRange {
 	return ranges
 }
 
-func (r Ranger) RangedReader(length int64, offset int64, getter func(br ByteRange) io.Reader, parallelism int) io.Reader {
+type errorReader struct {
+	err error
+}
+
+func (e errorReader) Read([]byte) (n int, err error) {
+	return 0, e.err
+}
+
+func (r Ranger) RangedReader(length int64, offset int64, loader func(br ByteRange) (io.Reader, error), parallelism int) io.Reader {
 	cr := NewChannelReader()
 
 	// use cirque to manage an ordered worker pool (order is important because we want
 	// the readers to come out in byte range order, or we'll jumble the data).
-	inputRanges, outputReaders := cirque.NewCirque(int64(parallelism), getter)
+	inputRanges, outputReaders := cirque.NewCirque(int64(parallelism), func(br ByteRange) io.Reader {
+		r, err := loader(br)
+		if err != nil {
+			return errorReader{err: err}
+		}
+		return r
+	})
 
 	// send byte Ranges as input to the worker pool
 	go func() {
