@@ -3,9 +3,85 @@ package ranger
 import (
 	"fmt"
 	"io"
-
-	"github.com/sudhirj/cirque"
 )
+
+// Loader implements a Load method that provides data as an io.Reader for a
+// given byte range chunk. Load should be safe to call from multiple goroutines.
+// If the Loader is being used with the Preload option, it should be safe to
+// call the Load function multiple times in quick succession. Using a caching
+// system like https://github.com/golang/groupcache would make a lot of sense in that case.
+type Loader interface {
+	Load(br ByteRange) (io.Reader, error)
+}
+type LoaderFunc func(br ByteRange) (io.Reader, error)
+
+func (l LoaderFunc) Load(br ByteRange) (io.Reader, error) {
+	return l(br)
+}
+
+type ChunkAlignedRemoteFile struct {
+	Loader Loader
+	Length int64
+	Ranger Ranger
+	reader io.Reader
+}
+
+func (rf *ChunkAlignedRemoteFile) Read(p []byte) (n int, err error) {
+	if rf.reader == nil {
+		rf.reader = io.MultiReader(rf.Readers()...)
+	}
+	return rf.reader.Read(p)
+}
+
+func (rf *ChunkAlignedRemoteFile) Readers() []io.Reader {
+	chunks := rf.Chunks()
+	readers := make([]io.Reader, len(chunks))
+	for i := range chunks {
+		readers[i] = &chunks[i]
+	}
+	return readers
+}
+
+func (rf *ChunkAlignedRemoteFile) Chunks() []Chunk {
+	ranges := rf.Ranger.Ranges(rf.Length, 0)
+	chunks := make([]Chunk, len(ranges))
+	for i, br := range ranges {
+		chunks[i] = Chunk{
+			RemoteFile: rf,
+			ByteRange:  br,
+		}
+	}
+	return chunks
+}
+
+type Chunk struct {
+	RemoteFile *ChunkAlignedRemoteFile
+	ByteRange  ByteRange
+	reader     io.Reader
+}
+
+func (c *Chunk) Close() error {
+	if c.reader != nil {
+		if closer, ok := c.reader.(io.Closer); ok {
+			return closer.Close()
+		}
+	}
+	return nil
+}
+
+func (c *Chunk) Read(p []byte) (n int, err error) {
+	if c.reader == nil {
+		c.reader, err = c.Load()
+		if err != nil {
+			return 0, err
+		}
+	}
+	return c.reader.Read(p)
+}
+
+func (c *Chunk) Load() (io.Reader, error) {
+	return c.RemoteFile.Loader.Load(c.ByteRange)
+}
 
 type ByteRange struct {
 	From int64
@@ -46,42 +122,10 @@ func (r Ranger) Ranges(length int64, offset int64) []ByteRange {
 	return ranges
 }
 
-type errorReader struct {
-	err error
-}
-
-func (e errorReader) Read([]byte) (n int, err error) {
-	return 0, e.err
-}
-
-func (r Ranger) RangedReader(length int64, offset int64, loader func(br ByteRange) (io.Reader, error), parallelism int) io.Reader {
-	cr := NewChannelReader()
-
-	// use cirque to manage an ordered worker pool (order is important because we want
-	// the readers to come out in byte range order, or we'll jumble the data).
-	inputRanges, outputReaders := cirque.NewCirque(int64(parallelism), func(br ByteRange) io.Reader {
-		r, err := loader(br)
-		if err != nil {
-			return errorReader{err: err}
-		}
-		return r
-	})
-
-	// send byte Ranges as input to the worker pool
-	go func() {
-		for _, br := range r.Ranges(length, offset) {
-			inputRanges <- br
-		}
-		close(inputRanges)
-	}()
-
-	// add the worker pool outputs to the Reader
-	go func() {
-		for r := range outputReaders {
-			cr.Inputs() <- r
-		}
-		cr.Close()
-	}()
-
-	return cr
+func NewChunkAlignedRemoteFile(length int64, loader Loader, ranger Ranger) *ChunkAlignedRemoteFile {
+	return &ChunkAlignedRemoteFile{
+		Loader: loader,
+		Length: length,
+		Ranger: ranger,
+	}
 }

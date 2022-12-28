@@ -56,7 +56,7 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		return buf, nil
 	}
 
-	rangedReader := rhc.ranger.RangedReader(contentLength, 0, loader, rhc.parallelism)
+	rangedReader := NewChunkAlignedRemoteFile(contentLength, LoaderFunc(loader), rhc.ranger)
 
 	combinedResponse := &http.Response{
 		Status:        "200 OK",
