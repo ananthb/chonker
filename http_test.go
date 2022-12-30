@@ -14,16 +14,11 @@ import (
 )
 
 func TestBasicDownload(t *testing.T) {
-	rand.Seed(42)
-	content := make([]byte, 10000)
-	rand.Read(content)
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		//time.Sleep(1 * time.Second)
-		dumpRequest, _ := httputil.DumpRequest(request, false)
-		t.Log(time.Now(), string(dumpRequest))
-		http.ServeContent(writer, request, "", time.Time{}, bytes.NewReader(content))
-	}))
+	content := makeSlice()
+	server := makeServer(t, content)
+
 	rangerClient := NewRangingHTTPClient(NewRanger(1000), http.DefaultClient, 10)
+
 	req, err := http.NewRequest("GET", server.URL, nil)
 	assert.Nil(t, err)
 	response, err := rangerClient.Do(req)
@@ -31,4 +26,20 @@ func TestBasicDownload(t *testing.T) {
 	servedContent, err := io.ReadAll(response.Body)
 	assert.Nil(t, err)
 	assert.Equal(t, content, servedContent)
+}
+
+func makeSlice() []byte {
+	rand.Seed(42)
+	content := make([]byte, 10000)
+	rand.Read(content)
+	return content
+}
+
+func makeServer(t *testing.T, content []byte) *httptest.Server {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		dumpRequest, _ := httputil.DumpRequest(request, false)
+		t.Log(time.Now(), string(dumpRequest))
+		http.ServeContent(writer, request, "", time.Time{}, bytes.NewReader(content))
+	}))
+	return server
 }
