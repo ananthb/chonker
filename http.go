@@ -26,7 +26,7 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("error getting content length via HEAD: %w", err)
 	}
 
-	loader := func(br ByteRange) ([]byte, error) {
+	loader := LoaderFunc(func(br ByteRange) ([]byte, error) {
 		partReq, err := http.NewRequest("GET", req.URL.String(), nil)
 		if err != nil {
 			return nil, fmt.Errorf("error building GET request for segment %v: %w", br.Header(), err)
@@ -54,9 +54,9 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		}
 
 		return buf.Bytes(), nil
-	}
+	})
 
-	remoteFile := NewRemoteFile(contentLength, LoaderFunc(loader), rhc.ranger)
+	remoteFile := NewRemoteFile(contentLength, WrapSingleFlightLoader(WrapLRUCacheLoader(loader, 3)), rhc.ranger)
 
 	combinedResponse := &http.Response{
 		Status:        "200 OK",
