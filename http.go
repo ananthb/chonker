@@ -56,7 +56,9 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		return buf.Bytes(), nil
 	})
 
-	remoteFile := NewRemoteFile(contentLength, WrapSingleFlightLoader(WrapLRUCacheLoader(loader, 3)), rhc.ranger)
+	loaderWithLRUCache := WrapLoaderWithLRUCache(loader, 3)
+	loaderWithSingleFlight := WrapLoaderWithSingleFlight(loaderWithLRUCache)
+	remoteFile := NewRangedSource(contentLength, loaderWithSingleFlight, rhc.ranger)
 
 	combinedResponse := &http.Response{
 		Status:        "200 OK",

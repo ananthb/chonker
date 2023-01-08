@@ -23,9 +23,9 @@ func (l LoaderFunc) Load(br ByteRange) ([]byte, error) {
 	return l(br)
 }
 
-// WrapSingleFlightLoader wraps a Loader to ensure that only one call at a time
+// WrapLoaderWithSingleFlight wraps a Loader to ensure that only one call at a time
 // for a given byte range is made to the wrapped loader.
-func WrapSingleFlightLoader(loader Loader) Loader {
+func WrapLoaderWithSingleFlight(loader Loader) Loader {
 	group := new(singleflight.Group)
 	return LoaderFunc(func(br ByteRange) ([]byte, error) {
 		data, err, _ := group.Do(br.Header(), func() (interface{}, error) {
@@ -36,11 +36,11 @@ func WrapSingleFlightLoader(loader Loader) Loader {
 	})
 }
 
-// WrapLRUCacheLoader wraps a loader to cache the results returned by the
-// inner loader in an LRU cache of the given slot count. For best results, wrap this
-// Loader with WrapSingleFlightLoader to make sure multiple calls are not
+// WrapLoaderWithLRUCache wraps a loader to cache the results returned by the
+// inner loader in an LRU cache of the given slot count. For best results, wrap the returned
+// Loader with WrapLoaderWithSingleFlight to make sure multiple calls are not
 // make while the cache is being filled. If the given slots count is negative, zero is used.
-func WrapLRUCacheLoader(loader Loader, slots int) Loader {
+func WrapLoaderWithLRUCache(loader Loader, slots int) Loader {
 	cache, _ := lru.New[ByteRange, []byte](max(slots, 0))
 	return LoaderFunc(func(br ByteRange) ([]byte, error) {
 		if data, found := cache.Get(br); found {

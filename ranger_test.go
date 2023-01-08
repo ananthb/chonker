@@ -55,7 +55,7 @@ func TestIndex(t *testing.T) {
 func TestReadAt(t *testing.T) {
 	ranger := NewRanger(3)
 	data := makeData(10)
-	rf := NewRemoteFile(10, LoaderFunc(func(br ByteRange) ([]byte, error) {
+	rf := NewRangedSource(10, LoaderFunc(func(br ByteRange) ([]byte, error) {
 		return data[br.From : br.To+1], nil
 	}), ranger)
 	holder := make([]byte, 3)
@@ -79,7 +79,7 @@ func TestReadAt(t *testing.T) {
 func TestReadAtExtremes(t *testing.T) {
 	ranger := NewRanger(3)
 	data := makeData(10)
-	rf := NewRemoteFile(10, LoaderFunc(func(br ByteRange) ([]byte, error) {
+	rf := NewRangedSource(10, LoaderFunc(func(br ByteRange) ([]byte, error) {
 		return data[br.From : br.To+1], nil
 	}), ranger)
 	holder := make([]byte, 1)
