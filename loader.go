@@ -1,6 +1,9 @@
 package ranger
 
 import (
+	"os"
+	"path"
+
 	lru "github.com/hashicorp/golang-lru/v2"
 	"golang.org/x/sync/singleflight"
 )
@@ -57,5 +60,50 @@ func WrapLoaderWithLRUCache(loader Loader, slots int) Loader {
 		}
 
 		return data, nil
+	})
+}
+
+func WrapLoaderWithFileCache(loader Loader, cacheDir string) Loader {
+	return LoaderFunc(func(br ByteRange) ([]byte, error) {
+		filename := path.Join(cacheDir, br.Header())
+		data, err := os.ReadFile(filename)
+		if err == nil {
+			return data, nil
+		}
+		data, err = loader.Load(br)
+		if err == nil {
+			_ = os.WriteFile(filename, data, 0644)
+		}
+		return data, err
+	})
+}
+
+func WrapLoaderWithLoadSheddingFileCache(loader Loader, cacheDir string, maxLoad int) Loader {
+	readChan := make(chan struct{}, max(maxLoad, 1))
+	writeChan := make(chan struct{}, max(maxLoad, 1))
+
+	return LoaderFunc(func(br ByteRange) ([]byte, error) {
+		filename := path.Join(cacheDir, br.Header())
+
+		select {
+		case readChan <- struct{}{}:
+			data, err := os.ReadFile(filename)
+			<-readChan
+			if err == nil {
+				return data, nil
+			}
+		default:
+		}
+
+		data, err := loader.Load(br)
+
+		select {
+		case writeChan <- struct{}{}:
+			_ = os.WriteFile(filename, data, 0644)
+			<-writeChan
+		default:
+		}
+
+		return data, err
 	})
 }
