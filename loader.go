@@ -63,6 +63,12 @@ func WrapLoaderWithLRUCache(loader Loader, slots int) Loader {
 	})
 }
 
+// WrapLoaderWithFileCache wraps a loader to cache the data returned in the given directory.
+//
+// Each byte range is cached in a separate file named after the byte range header.
+//
+// The cache is not invalidated or cleared in any way, so the caller is responsible for
+// cleaning up the cache directory and invalidating it on remote changes.
 func WrapLoaderWithFileCache(loader Loader, cacheDir string) Loader {
 	return LoaderFunc(func(br ByteRange) ([]byte, error) {
 		filename := path.Join(cacheDir, br.Header())
@@ -78,6 +84,9 @@ func WrapLoaderWithFileCache(loader Loader, cacheDir string) Loader {
 	})
 }
 
+// WrapLoaderWithLoadSheddingFileCache behavior is the same as WrapLoaderWithFileCache,
+// except that it will shed load by not using the cache if maxLoad operations are already
+// waiting to be preformed. This allows bypassing a cache on a slow or busy filesystem.
 func WrapLoaderWithLoadSheddingFileCache(loader Loader, cacheDir string, maxLoad int) Loader {
 	readChan := make(chan struct{}, max(maxLoad, 1))
 	writeChan := make(chan struct{}, max(maxLoad, 1))
