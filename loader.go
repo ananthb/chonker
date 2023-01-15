@@ -33,7 +33,7 @@ func (l LoaderFunc) Load(br ByteRange) ([]byte, error) {
 func WrapLoaderWithSingleFlight(loader Loader) Loader {
 	group := new(singleflight.Group)
 	return LoaderFunc(func(br ByteRange) ([]byte, error) {
-		data, err, _ := group.Do(br.Header(), func() (interface{}, error) {
+		data, err, _ := group.Do(br.RangeHeader(), func() (interface{}, error) {
 			data, err := loader.Load(br)
 			return data, err
 		})
@@ -71,7 +71,7 @@ func WrapLoaderWithLRUCache(loader Loader, slots int) Loader {
 // cleaning up the cache directory and invalidating it on remote changes.
 func WrapLoaderWithFileCache(loader Loader, cacheDir string) Loader {
 	return LoaderFunc(func(br ByteRange) ([]byte, error) {
-		filename := path.Join(cacheDir, br.Header())
+		filename := path.Join(cacheDir, br.RangeHeader())
 		data, err := os.ReadFile(filename)
 		if err == nil {
 			return data, nil
@@ -92,7 +92,7 @@ func WrapLoaderWithLoadSheddingFileCache(loader Loader, cacheDir string, maxLoad
 	writeChan := make(chan struct{}, max(maxLoad, 1))
 
 	return LoaderFunc(func(br ByteRange) ([]byte, error) {
-		filename := path.Join(cacheDir, br.Header())
+		filename := path.Join(cacheDir, br.RangeHeader())
 
 		select {
 		case readChan <- struct{}{}:

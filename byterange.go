@@ -8,9 +8,9 @@ type ByteRange struct {
 	To   int64
 }
 
-// Header returns the HTTP header representation of the byte range,
-// suitable for use in the Range header.
-func (r ByteRange) Header() string {
+// RangeHeader returns the HTTP header representation of the byte range,
+// suitable for use in the Range header, as described in https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Range
+func (r ByteRange) RangeHeader() string {
 	return fmt.Sprintf("bytes=%v-%v", r.From, r.To)
 }
 

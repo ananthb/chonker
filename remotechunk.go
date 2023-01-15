@@ -1,6 +1,10 @@
 package ranger
 
-import "io"
+import (
+	"io"
+
+	"github.com/sourcegraph/conc/stream"
+)
 
 type RangedSource struct {
 	chunks []Chunk
@@ -8,18 +12,18 @@ type RangedSource struct {
 	length int64
 }
 
-func (r RangedSource) ReadAt(p []byte, off int64) (n int, err error) {
+func (rs RangedSource) ReadAt(p []byte, off int64) (n int, err error) {
 	size := len(p)
 	for n < size {
 		offset := int64(n) + off
-		chunkIndex := r.ranger.Index(offset)
-		chunk := r.chunks[chunkIndex]
+		chunkIndex := rs.ranger.Index(offset)
+		chunk := rs.chunks[chunkIndex]
 		chunkData, err := chunk.Load()
 		if err != nil {
 			return n, err
 		}
 
-		chunkOffset := offset % r.ranger.chunkSize
+		chunkOffset := offset % rs.ranger.chunkSize
 		copied := copy(p[n:], chunkData[chunkOffset:])
 
 		if copied == 0 {
@@ -39,11 +43,42 @@ type ReaderSeekerReadAt interface {
 	Size() int64
 }
 
-func (r RangedSource) Reader() ReaderSeekerReadAt {
+// Reader provides an io.Reader, io.Seeker and io.ReaderAt for the ranged source.
+func (rs RangedSource) Reader() io.ReadSeeker {
 	// the io.Reader, io.Seeker methods are stateful and need a
 	// separate struct to track them. io.ReadAt is stateless and can be
 	// implemented on main.
-	return io.NewSectionReader(r, 0, r.length)
+	return io.NewSectionReader(rs, 0, rs.length)
+}
+
+func (rs RangedSource) ReaderAt() io.ReaderAt {
+	return rs
+}
+
+func (rs RangedSource) PreloadingReader(n int) io.ReadCloser {
+	r, w := io.Pipe()
+	s := stream.Stream{}
+	s.WithMaxGoroutines(n)
+	for _, chunk := range rs.chunks {
+		chunk := chunk
+		s.Go(func() stream.Callback {
+			data, err := chunk.Load()
+			if err != nil {
+				return func() {
+					_ = w.CloseWithError(err)
+				}
+			}
+			return func() {
+				_, _ = w.Write(data)
+			}
+		})
+	}
+	go func() {
+		s.Wait()
+		_ = w.Close()
+	}()
+	return r
+
 }
 
 func NewRangedSource(length int64, loader Loader, ranger Ranger) RangedSource {
