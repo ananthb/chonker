@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+
+	"github.com/sourcegraph/conc/pool"
 
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
@@ -21,28 +23,46 @@ var rootCmd = &cobra.Command{
 	Short: "downranger is a very fast large object downloader. It saturates your connection by downloading multiple byte ranges in parallel.",
 	Long:  `A fast downloader that works by fetching byte chunks in parallel.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		req, err := http.NewRequest("GET", Source, nil)
+		sourceURL, err := url.Parse(Source)
 		if err != nil {
 			return err
 		}
-		log.Println("Built request.")
+		contentLength, err := ranger.GetContentLength(sourceURL, http.DefaultClient)
+		if err != nil {
+			return err
+		}
 		dest, err := os.Create(Destination)
 		if err != nil {
 			return err
 		}
-		log.Println("Created destination.")
-		rc := ranger.NewRangingHTTPClient(ranger.NewRanger(ChunkSize), http.DefaultClient, Parallelism)
-		resp, err := rc.Do(req)
-		if err != nil {
-			return err
-		}
-		log.Println("Starting download...")
+
+		nr := ranger.NewRanger(ChunkSize)
+		loader := ranger.HTTPLoader(sourceURL, http.DefaultClient)
+
 		bar := progressbar.DefaultBytes(
-			resp.ContentLength,
+			contentLength,
 			"Downloading",
 		)
-		_, err = io.Copy(io.MultiWriter(dest, bar), resp.Body)
+		ranges := nr.Ranges(contentLength)
+		workerPool := pool.New().WithMaxGoroutines(Parallelism)
+		for _, br := range ranges {
+			br := br
+			workerPool.Go(func() {
+				log.Println("Loading", br.RangeHeader())
+				data, err := loader.Load(br)
+				if err != nil {
+					log.Fatal(err)
+				}
+				log.Println("Writing", br.RangeHeader())
+				_, err = dest.WriteAt(data, br.From)
+				if err != nil {
+					log.Fatal(err)
+				}
+				bar.Add64(br.Length())
+			})
+		}
 
+		workerPool.Wait()
 		return err
 	},
 }

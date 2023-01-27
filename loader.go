@@ -3,6 +3,7 @@ package ranger
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -30,7 +31,7 @@ func (l LoaderFunc) Load(br ByteRange) ([]byte, error) {
 	return l(br)
 }
 
-func HTTPLoader(url *url.URL, client *http.Client) Loader {
+func HTTPLoader(url *url.URL, client HTTPClient) Loader {
 	return LoaderFunc(func(br ByteRange) ([]byte, error) {
 		partReq, err := http.NewRequest("GET", url.String(), nil)
 		if err != nil {
@@ -50,7 +51,7 @@ func HTTPLoader(url *url.URL, client *http.Client) Loader {
 		}
 
 		_ = partResp.Body.Close()
-
+		log.Println(partResp.Header)
 		return data, nil
 
 	})
