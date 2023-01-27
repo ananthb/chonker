@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"github.com/sudhirj/ranger"
-	"io"
-	"net/http"
-	"os"
 )
 
 var Source string
@@ -23,15 +25,18 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		log.Println("Built request.")
 		dest, err := os.Create(Destination)
 		if err != nil {
 			return err
 		}
+		log.Println("Created destination.")
 		rc := ranger.NewRangingHTTPClient(ranger.NewRanger(ChunkSize), http.DefaultClient, Parallelism)
 		resp, err := rc.Do(req)
 		if err != nil {
 			return err
 		}
+		log.Println("Starting download...")
 		bar := progressbar.DefaultBytes(
 			resp.ContentLength,
 			"Downloading",

@@ -1,10 +1,13 @@
 package ranger
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 // HTTPClient provides an interface allowing us to perform HTTP requests.
@@ -25,8 +28,9 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error getting content length via HEAD: %w", err)
 	}
-
-	loader := LoaderFunc(func(br ByteRange) ([]byte, error) {
+	log.Println("content length", contentLength)
+	loader := SingleFlightLoaderWrap(LoaderFunc(func(br ByteRange) ([]byte, error) {
+		log.Println("ACTUAL.REQUEST", br)
 		partReq, err := http.NewRequest("GET", req.URL.String(), nil)
 		if err != nil {
 			return nil, fmt.Errorf("error building GET request for segment %v: %w", br.RangeHeader(), err)
@@ -38,27 +42,22 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 			return nil, fmt.Errorf("error making the request for segment %v: %w", br.RangeHeader(), err)
 		}
 
-		buf := bytes.NewBuffer(make([]byte, 0, br.Length()))
-		n, err := buf.ReadFrom(partResp.Body)
+		buf, err := io.ReadAll(partResp.Body)
 		if err != nil {
-			return nil, fmt.Errorf("error reading the request for segment %v: %w", br.RangeHeader(), err)
-		}
-
-		if n != br.Length() {
-			return nil, fmt.Errorf("error with received byte count on segment %v: expected %v bytes, but received %v", br.RangeHeader(), br.Length(), n)
+			return nil, fmt.Errorf("error reading data for segment %v: %w", br.RangeHeader(), err)
 		}
 
 		err = partResp.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("error closing the request for segment %v: %w", br.RangeHeader(), err)
 		}
+		return buf, nil
+	}))
 
-		return buf.Bytes(), nil
-	})
+	loader = SingleFlightLoaderWrap(loader)
+	loader = SingleFlightLoaderWrap(LRUCacheLoaderWrap(loader, 10))
 
-	loaderWithLRUCache := WrapLoaderWithLRUCache(loader, 3)
-	loaderWithSingleFlight := WrapLoaderWithSingleFlight(loaderWithLRUCache)
-	remoteFile := NewRangedSource(contentLength, loaderWithSingleFlight, rhc.ranger)
+	remoteFile := NewRangedSource(contentLength, loader, rhc.ranger)
 
 	combinedResponse := &http.Response{
 		Status:        "200 OK",
@@ -77,7 +76,34 @@ func (rhc RangingHTTPClient) getContentLength(req *http.Request) (int64, error) 
 		return 0, err
 	}
 	headResp, err := rhc.client.Do(headReq)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return 0, err
+	}
+	if errors.Is(err, io.EOF) || headResp.ContentLength < 1 {
+		return rhc.getContentLengthWithGETRequest(req)
+	}
+
+	log.Println("head", headResp.Header)
 	return headResp.ContentLength, err
+}
+
+func (rhc RangingHTTPClient) getContentLengthWithGETRequest(req *http.Request) (int64, error) {
+	lengthReq, err := http.NewRequest("GET", req.URL.String(), nil)
+	if err != nil {
+		return 0, err
+	}
+	lengthReq.Header.Set("Range", ByteRange{From: 0, To: 0}.RangeHeader())
+	lengthResp, err := rhc.client.Do(lengthReq)
+	if err != nil {
+		return 0, err
+	}
+	contentRangeHeaderParts := strings.Split(lengthResp.Header.Get("Content-Range"), "/")
+	if len(contentRangeHeaderParts) < 2 {
+		return 0, errors.New("could not figure out content length")
+	}
+	log.Println("headers", lengthResp.Header)
+	return strconv.ParseInt(contentRangeHeaderParts[1], 10, 64)
+
 }
 
 func NewRangingHTTPClient(ranger Ranger, client HTTPClient, parallelism int) RangingHTTPClient {

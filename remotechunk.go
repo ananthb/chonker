@@ -2,8 +2,6 @@ package ranger
 
 import (
 	"io"
-
-	"github.com/sourcegraph/conc/stream"
 )
 
 type RangedSource struct {
@@ -53,44 +51,6 @@ func (rs RangedSource) Reader() io.ReadSeeker {
 
 func (rs RangedSource) ReaderAt() io.ReaderAt {
 	return rs
-}
-
-func (rs RangedSource) PreloadingReader(n int) io.ReadCloser {
-	cancelled := false
-	r, w := io.Pipe()
-	s := new(stream.Stream).WithMaxGoroutines(n)
-
-	for _, chunk := range rs.chunks {
-		if cancelled {
-			break
-		}
-		chunk := chunk
-		s.Go(func() stream.Callback {
-			if cancelled {
-				return func() {
-					_ = w.Close()
-				}
-			}
-
-			data, err := chunk.Load()
-			if err == nil {
-				return func() {
-					_, _ = w.Write(data)
-				}
-			}
-
-			return func() {
-				_ = w.CloseWithError(err)
-				cancelled = true
-			}
-		})
-	}
-
-	go func() {
-		s.Wait()
-		_ = w.Close()
-	}()
-	return r
 }
 
 func NewRangedSource(length int64, loader Loader, ranger Ranger) RangedSource {
