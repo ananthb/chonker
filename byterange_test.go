@@ -20,8 +20,3 @@ func TestByteRangeLength(t *testing.T) {
 	assert.Equal(t, int64(10), ByteRange{From: 0, To: 9}.Length())
 	assert.Equal(t, int64(1), ByteRange{From: 0, To: 0}.Length())
 }
-
-func TestByteRange_Next(t *testing.T) {
-	assert.Equal(t, ByteRange{From: 0, To: 9}.Next(), ByteRange{From: 10, To: 19})
-	assert.Equal(t, ByteRange{From: 10, To: 19}.Next(), ByteRange{From: 20, To: 29})
-}

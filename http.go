@@ -18,22 +18,20 @@ type HTTPClient interface {
 
 // RangingHTTPClient wraps another HTTP client to issue all requests based on the Ranges provided.
 type RangingHTTPClient struct {
-	client      HTTPClient
-	ranger      Ranger
-	parallelism int
+	client HTTPClient
+	ranger Ranger
 	HTTPClient
 }
 
 func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
-	contentLength, err := rhc.getContentLength(req)
+	contentLength, err := GetContentLengthFromHEAD(req.URL, rhc.client)
 	if err != nil {
 		return nil, fmt.Errorf("error getting content length via HEAD: %w", err)
 	}
-	log.Println("content length", contentLength)
-	loader := SingleFlightLoaderWrap(HTTPLoader(req.URL, rhc.client))
 
+	loader := HTTPLoader(req.URL, rhc.client)
+	loader = LRUCacheLoaderWrap(loader, 3)
 	loader = SingleFlightLoaderWrap(loader)
-	loader = SingleFlightLoaderWrap(LRUCacheLoaderWrap(loader, 10))
 
 	remoteFile := NewRangedSource(contentLength, loader, rhc.ranger)
 
@@ -91,14 +89,10 @@ func GetContentLength(url *url.URL, client HTTPClient) (int64, error) {
 	}
 	return headLength, nil
 }
-func (rhc RangingHTTPClient) getContentLength(req *http.Request) (int64, error) {
-	return GetContentLength(req.URL, rhc.client)
-}
 
-func NewRangingHTTPClient(ranger Ranger, client HTTPClient, parallelism int) RangingHTTPClient {
+func NewRangingHTTPClient(ranger Ranger, client HTTPClient) RangingHTTPClient {
 	return RangingHTTPClient{
-		ranger:      ranger,
-		client:      client,
-		parallelism: parallelism,
+		ranger: ranger,
+		client: client,
 	}
 }

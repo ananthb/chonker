@@ -1,16 +1,5 @@
 package ranger
 
-// Chunk represents a chunk of data that can be loaded from a source.
-type Chunk struct {
-	Loader    Loader
-	ByteRange ByteRange
-}
-
-// Load loads the chunk from the source.
-func (c *Chunk) Load() ([]byte, error) {
-	return c.Loader.Load(c.ByteRange)
-}
-
 // Ranger can split a file into chunks of a given size.
 type Ranger struct {
 	chunkSize int64

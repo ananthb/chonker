@@ -5,9 +5,10 @@ import (
 )
 
 type RangedSource struct {
-	chunks []Chunk
-	ranger Ranger
-	length int64
+	byteRanges []ByteRange
+	loader     Loader
+	ranger     Ranger
+	length     int64
 }
 
 func (rs RangedSource) ReadAt(p []byte, off int64) (n int, err error) {
@@ -15,8 +16,8 @@ func (rs RangedSource) ReadAt(p []byte, off int64) (n int, err error) {
 	for n < size {
 		offset := int64(n) + off
 		chunkIndex := rs.ranger.Index(offset)
-		chunk := rs.chunks[chunkIndex]
-		chunkData, err := chunk.Load()
+		chunk := rs.byteRanges[chunkIndex]
+		chunkData, err := rs.loader.Load(chunk)
 		if err != nil {
 			return n, err
 		}
@@ -54,18 +55,11 @@ func (rs RangedSource) ReaderAt() io.ReaderAt {
 }
 
 func NewRangedSource(length int64, loader Loader, ranger Ranger) RangedSource {
-	chunks := make([]Chunk, 0)
-	for _, br := range ranger.Ranges(length) {
-		chunks = append(chunks, Chunk{
-			Loader:    loader,
-			ByteRange: br,
-		})
-	}
 	rf := RangedSource{
-		chunks: chunks,
-		ranger: ranger,
-		length: length,
+		byteRanges: ranger.Ranges(length),
+		loader:     loader,
+		ranger:     ranger,
+		length:     length,
 	}
-
 	return rf
 }

@@ -18,17 +18,3 @@ func (r ByteRange) RangeHeader() string {
 func (r ByteRange) Length() int64 {
 	return r.To - r.From + 1
 }
-
-func (r ByteRange) Next() ByteRange {
-	return ByteRange{
-		From: r.To + 1,
-		To:   r.To + r.Length(),
-	}
-}
-
-func (r ByteRange) Constrained(length int64) ByteRange {
-	return ByteRange{
-		From: r.From,
-		To:   min(r.To, length-1),
-	}
-}

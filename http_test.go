@@ -12,7 +12,7 @@ func TestBasicDownload(t *testing.T) {
 	content := makeData(10000)
 	server := makeServer(t, content)
 
-	rangerClient := NewRangingHTTPClient(NewRanger(1000), http.DefaultClient, 10)
+	rangerClient := NewRangingHTTPClient(NewRanger(1000), http.DefaultClient)
 
 	req, err := http.NewRequest("GET", server.URL, nil)
 	assert.Nil(t, err)
