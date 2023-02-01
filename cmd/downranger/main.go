@@ -37,7 +37,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		nr := ranger.NewRanger(ChunkSize)
-		loader := ranger.HTTPLoader(sourceURL, http.DefaultClient)
+		loader := ranger.DefaultHTTPLoader(sourceURL)
 
 		bar := progressbar.DefaultBytes(
 			contentLength,
@@ -48,12 +48,12 @@ var rootCmd = &cobra.Command{
 		for _, br := range ranges {
 			br := br
 			workerPool.Go(func() {
-				log.Println("Loading", br.RangeHeader())
+
 				data, err := loader.Load(br)
 				if err != nil {
 					log.Fatal(err)
 				}
-				log.Println("Writing", br.RangeHeader())
+
 				_, err = dest.WriteAt(data, br.From)
 				if err != nil {
 					log.Fatal(err)

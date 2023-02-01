@@ -30,8 +30,6 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	loader := HTTPLoader(req.URL, rhc.client)
-	loader = LRUCacheLoaderWrap(loader, 3)
-	loader = SingleFlightLoaderWrap(loader)
 
 	remoteFile := NewRangedSource(contentLength, loader, rhc.ranger)
 
