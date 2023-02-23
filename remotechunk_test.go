@@ -3,6 +3,7 @@ package ranger
 import (
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -54,4 +55,18 @@ func TestReadAtExtremes(t *testing.T) {
 	assert.EqualError(t, err, io.EOF.Error())
 	assert.Equal(t, 10, n)
 	assert.Equal(t, data, giantHolder[0:10])
+}
+
+func TestLookaheadReader(t *testing.T) {
+	ranger := NewRanger(2)
+	data := makeData(10)
+	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
+		t.Log("loading", time.Now(), br)
+		time.Sleep(100 * time.Millisecond)
+		return data[br.From : br.To+1], nil
+	}), ranger)
+	pr := rf.LookaheadReader(3)
+	received, err := io.ReadAll(pr)
+	assert.NoError(t, err)
+	assert.Equal(t, data, received)
 }

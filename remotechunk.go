@@ -1,7 +1,10 @@
 package ranger
 
 import (
+	"context"
 	"io"
+
+	"github.com/sourcegraph/conc/stream"
 )
 
 type RangedSource struct {
@@ -52,6 +55,37 @@ func (rs RangedSource) Reader() io.ReadSeeker {
 
 func (rs RangedSource) ReaderAt() io.ReaderAt {
 	return rs
+}
+
+func (rs RangedSource) LookaheadReader(parallelism int) io.Reader {
+	r, w := io.Pipe()
+	ctx, cancel := context.WithCancel(context.TODO())
+
+	go func() {
+		defer w.Close()
+		workStream := stream.New().WithMaxGoroutines(parallelism)
+		for _, br := range rs.byteRanges {
+			br := br
+			workStream.Go(func() stream.Callback {
+				if ctx.Err() != nil {
+					return func() {}
+				}
+				data, err := rs.loader.Load(br)
+				if err != nil {
+					return func() {
+						_ = w.CloseWithError(err)
+						cancel()
+					}
+				}
+				return func() {
+					_, _ = w.Write(data)
+				}
+			})
+		}
+		workStream.Wait()
+	}()
+
+	return r
 }
 
 func NewRangedSource(length int64, loader Loader, ranger Ranger) RangedSource {

@@ -2,12 +2,10 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
-
-	"github.com/sourcegraph/conc/pool"
 
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
@@ -27,10 +25,12 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
 		contentLength, err := ranger.GetContentLength(sourceURL, http.DefaultClient)
 		if err != nil {
 			return err
 		}
+
 		dest, err := os.Create(Destination)
 		if err != nil {
 			return err
@@ -38,31 +38,14 @@ var rootCmd = &cobra.Command{
 
 		nr := ranger.NewRanger(ChunkSize)
 		loader := ranger.DefaultHTTPLoader(sourceURL)
+		rs := ranger.NewRangedSource(contentLength, loader, nr)
 
-		bar := progressbar.DefaultBytes(
+		mw := io.MultiWriter(dest, progressbar.DefaultBytes(
 			contentLength,
 			"Downloading",
-		)
-		ranges := nr.Ranges(contentLength)
-		workerPool := pool.New().WithMaxGoroutines(Parallelism)
-		for _, br := range ranges {
-			br := br
-			workerPool.Go(func() {
+		))
+		_, err = io.Copy(mw, rs.LookaheadReader(Parallelism))
 
-				data, err := loader.Load(br)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				_, err = dest.WriteAt(data, br.From)
-				if err != nil {
-					log.Fatal(err)
-				}
-				bar.Add64(br.Length())
-			})
-		}
-
-		workerPool.Wait()
 		return err
 	},
 }
