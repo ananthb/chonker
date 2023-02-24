@@ -2,8 +2,8 @@ package ranger
 
 import (
 	"io"
+	"strconv"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -61,12 +61,40 @@ func TestLookaheadReader(t *testing.T) {
 	ranger := NewRanger(2)
 	data := makeData(10)
 	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
-		t.Log("loading", time.Now(), br)
-		time.Sleep(100 * time.Millisecond)
+		//t.Log("loading", time.Now(), br)
+		//time.Sleep(100 * time.Millisecond)
 		return data[br.From : br.To+1], nil
 	}), ranger)
 	pr := rf.LookaheadReader(3)
 	received, err := io.ReadAll(pr)
 	assert.NoError(t, err)
 	assert.Equal(t, data, received)
+}
+
+func TestOffsetLookaheadReader(t *testing.T) {
+	ranger := NewRanger(2)
+	data := makeData(10)
+	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
+		return data[br.From : br.To+1], nil
+	}), ranger)
+
+	table := []struct {
+		offset int64
+		data   []byte
+	}{
+		{5, data[5:]},
+		{4, data[4:]},
+		{0, data},
+		{9, data[9:]},
+		{10, []byte{}},
+	}
+	for _, tc := range table {
+		t.Run(strconv.Itoa(int(tc.offset)), func(t *testing.T) {
+			pr := rf.OffsetLookaheadReader(3, tc.offset)
+			received, err := io.ReadAll(pr)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.data, received)
+		})
+	}
+
 }

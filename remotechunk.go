@@ -90,6 +90,50 @@ func (rs RangedSource) LookaheadReader(parallelism int) io.Reader {
 	return r
 }
 
+func (rs RangedSource) OffsetLookaheadReader(parallelism int, offset int64) io.Reader {
+	allByteRanges := rs.byteRanges
+	var relevantByteRanges []ByteRange
+	for _, br := range allByteRanges {
+		if br.To >= offset {
+			relevantByteRanges = append(relevantByteRanges, br)
+		}
+	}
+
+	r, w := io.Pipe()
+	ctx, cancel := context.WithCancel(context.TODO())
+	go func() {
+		defer w.Close()
+		workStream := stream.New().WithMaxGoroutines(parallelism)
+		for _, br := range relevantByteRanges {
+			br := br
+			select {
+			case <-ctx.Done():
+				break
+			default:
+			}
+			workStream.Go(func() stream.Callback {
+				data, err := rs.loader.Load(br)
+				if err != nil {
+					return func() {
+						_ = w.CloseWithError(err)
+						cancel()
+					}
+				}
+				dataOffset := int64(0)
+				if br.From <= offset && offset <= br.To {
+					dataOffset = offset - br.From
+				}
+				return func() {
+					_, _ = w.Write(data[dataOffset:])
+				}
+			})
+		}
+		workStream.Wait()
+	}()
+
+	return r
+}
+
 func NewRangedSource(length int64, loader Loader, ranger Ranger) RangedSource {
 	rf := RangedSource{
 		byteRanges: ranger.Ranges(length),
