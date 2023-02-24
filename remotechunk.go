@@ -66,10 +66,12 @@ func (rs RangedSource) LookaheadReader(parallelism int) io.Reader {
 		workStream := stream.New().WithMaxGoroutines(parallelism)
 		for _, br := range rs.byteRanges {
 			br := br
+			select {
+			case <-ctx.Done():
+				break
+			default:
+			}
 			workStream.Go(func() stream.Callback {
-				if ctx.Err() != nil {
-					return func() {}
-				}
 				data, err := rs.loader.Load(br)
 				if err != nil {
 					return func() {

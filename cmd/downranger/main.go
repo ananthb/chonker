@@ -52,11 +52,11 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.Flags().StringVarP(&Source, "source", "s", "", "Source URL to download from.")
-	rootCmd.MarkFlagRequired("source")
+	_ = rootCmd.MarkFlagRequired("source")
 
 	rootCmd.Flags().StringVarP(&Destination, "destination", "d", "", "Destination path to store the file in. Will be overwritten if it exists.")
-	rootCmd.MarkFlagRequired("destination")
-	rootCmd.MarkFlagFilename("destination")
+	_ = rootCmd.MarkFlagRequired("destination")
+	_ = rootCmd.MarkFlagFilename("destination")
 
 	rootCmd.Flags().IntVarP(&Parallelism, "parallelism", "p", 4, "Number of chunks to download in parallel.")
 	rootCmd.Flags().Int64VarP(&ChunkSize, "chunksize", "c", 8e6, "Default chunk size")
@@ -64,11 +64,11 @@ func init() {
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
 func main() {
-	rootCmd.Execute()
+	_ = rootCmd.Execute()
 }
