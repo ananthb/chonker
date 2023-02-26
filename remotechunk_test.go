@@ -1,6 +1,7 @@
 package ranger
 
 import (
+	"context"
 	"io"
 	"strconv"
 	"testing"
@@ -57,7 +58,7 @@ func TestReadAtExtremes(t *testing.T) {
 	assert.Equal(t, data, giantHolder[0:10])
 }
 
-func TestLookaheadReader(t *testing.T) {
+func TestParallelReader(t *testing.T) {
 	ranger := NewRanger(2)
 	data := makeData(10)
 	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
@@ -65,13 +66,13 @@ func TestLookaheadReader(t *testing.T) {
 		//time.Sleep(100 * time.Millisecond)
 		return data[br.From : br.To+1], nil
 	}), ranger)
-	pr := rf.LookaheadReader(3)
+	pr := rf.ParallelReader(context.Background(), 3)
 	received, err := io.ReadAll(pr)
 	assert.NoError(t, err)
 	assert.Equal(t, data, received)
 }
 
-func TestOffsetLookaheadReader(t *testing.T) {
+func TestParallelOffsetReader(t *testing.T) {
 	ranger := NewRanger(2)
 	data := makeData(10)
 	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
@@ -90,11 +91,23 @@ func TestOffsetLookaheadReader(t *testing.T) {
 	}
 	for _, tc := range table {
 		t.Run(strconv.Itoa(int(tc.offset)), func(t *testing.T) {
-			pr := rf.OffsetLookaheadReader(3, tc.offset)
+			pr := rf.ParallelOffsetReader(context.Background(), 3, tc.offset)
 			received, err := io.ReadAll(pr)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.data, received)
 		})
 	}
+}
 
+func TestParallelReaderLeaks(t *testing.T) {
+	ranger := NewRanger(2)
+	data := makeData(10)
+	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
+		return data[br.From : br.To+1], nil
+	}), ranger)
+	pr := rf.ParallelReader(context.Background(), 2)
+	received, err := io.ReadAll(io.LimitReader(pr, 4))
+	assert.NoError(t, err)
+	assert.Equal(t, data[:4], received)
+	pr.(io.ReadCloser).Close()
 }

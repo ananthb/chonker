@@ -10,11 +10,15 @@ type ByteRange struct {
 
 // RangeHeader returns the HTTP header representation of the byte range,
 // suitable for use in the Range header, as described in https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Range
-func (r ByteRange) RangeHeader() string {
-	return fmt.Sprintf("bytes=%v-%v", r.From, r.To)
+func (br ByteRange) RangeHeader() string {
+	return fmt.Sprintf("bytes=%v-%v", br.From, br.To)
 }
 
 // Length returns the length of the byte range.
-func (r ByteRange) Length() int64 {
-	return r.To - r.From + 1
+func (br ByteRange) Length() int64 {
+	return br.To - br.From + 1
+}
+
+func (br ByteRange) Contains(offset int64) bool {
+	return br.From <= offset && offset <= br.To
 }

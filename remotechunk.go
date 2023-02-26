@@ -8,18 +8,20 @@ import (
 )
 
 type RangedSource struct {
-	byteRanges []ByteRange
-	loader     Loader
-	ranger     Ranger
-	length     int64
+	cachedByteRanges []ByteRange
+	loader           Loader
+	ranger           Ranger
+	length           int64
 }
 
+// ReadAt implements the io.ReaderAt interface, while reading the data only in
+// chunks based on the given Ranger.
 func (rs RangedSource) ReadAt(p []byte, off int64) (n int, err error) {
 	size := len(p)
 	for n < size {
 		offset := int64(n) + off
 		chunkIndex := rs.ranger.Index(offset)
-		chunk := rs.byteRanges[chunkIndex]
+		chunk := rs.cachedByteRanges[chunkIndex]
 		chunkData, err := rs.loader.Load(chunk)
 		if err != nil {
 			return n, err
@@ -29,7 +31,7 @@ func (rs RangedSource) ReadAt(p []byte, off int64) (n int, err error) {
 		copied := copy(p[n:], chunkData[chunkOffset:])
 
 		if copied == 0 {
-			// We're finished, nothing left to copy
+			// we're finished, nothing left to copy
 			return n, io.EOF
 		}
 
@@ -38,14 +40,7 @@ func (rs RangedSource) ReadAt(p []byte, off int64) (n int, err error) {
 	return
 }
 
-type ReaderSeekerReadAt interface {
-	io.Reader
-	io.Seeker
-	io.ReaderAt
-	Size() int64
-}
-
-// Reader provides an io.Reader, io.Seeker and io.ReaderAt for the ranged source.
+// Reader provides a new io.ReadSeeker view for the ranged source.
 func (rs RangedSource) Reader() io.ReadSeeker {
 	// the io.Reader, io.Seeker methods are stateful and need a
 	// separate struct to track them. io.ReadAt is stateless and can be
@@ -53,54 +48,26 @@ func (rs RangedSource) Reader() io.ReadSeeker {
 	return io.NewSectionReader(rs, 0, rs.length)
 }
 
-func (rs RangedSource) ReaderAt() io.ReaderAt {
-	return rs
+// ParallelReader returns an io.Reader that reads the data in parallel, using
+// a number of goroutines equal to the given parallelism count. Data is still
+// returned in order.
+func (rs RangedSource) ParallelReader(ctx context.Context, parallelism int) io.Reader {
+	return rs.ParallelOffsetReader(ctx, parallelism, 0)
 }
 
-func (rs RangedSource) LookaheadReader(parallelism int) io.Reader {
-	r, w := io.Pipe()
-	ctx, cancel := context.WithCancel(context.TODO())
-
-	go func() {
-		defer w.Close()
-		workStream := stream.New().WithMaxGoroutines(parallelism)
-		for _, br := range rs.byteRanges {
-			br := br
-			select {
-			case <-ctx.Done():
-				break
-			default:
-			}
-			workStream.Go(func() stream.Callback {
-				data, err := rs.loader.Load(br)
-				if err != nil {
-					return func() {
-						_ = w.CloseWithError(err)
-						cancel()
-					}
-				}
-				return func() {
-					_, _ = w.Write(data)
-				}
-			})
-		}
-		workStream.Wait()
-	}()
-
-	return r
-}
-
-func (rs RangedSource) OffsetLookaheadReader(parallelism int, offset int64) io.Reader {
-	allByteRanges := rs.byteRanges
+// ParallelOffsetReader returns an io.Reader that reads the data in parallel, using
+// a number of goroutines equal to the given parallelism count. Data is still
+// returned in order. The reader will start reading at the given offset.
+func (rs RangedSource) ParallelOffsetReader(ctx context.Context, parallelism int, offset int64) io.Reader {
 	var relevantByteRanges []ByteRange
-	for _, br := range allByteRanges {
+	for _, br := range rs.cachedByteRanges {
 		if br.To >= offset {
 			relevantByteRanges = append(relevantByteRanges, br)
 		}
 	}
 
 	r, w := io.Pipe()
-	ctx, cancel := context.WithCancel(context.TODO())
+	ctx, cancel := context.WithCancel(ctx)
 	go func() {
 		defer w.Close()
 		workStream := stream.New().WithMaxGoroutines(parallelism)
@@ -120,11 +87,14 @@ func (rs RangedSource) OffsetLookaheadReader(parallelism int, offset int64) io.R
 					}
 				}
 				dataOffset := int64(0)
-				if br.From <= offset && offset <= br.To {
+				if br.Contains(offset) {
 					dataOffset = offset - br.From
 				}
 				return func() {
-					_, _ = w.Write(data[dataOffset:])
+					_, err = w.Write(data[dataOffset:])
+					if err != nil {
+						cancel()
+					}
 				}
 			})
 		}
@@ -136,10 +106,10 @@ func (rs RangedSource) OffsetLookaheadReader(parallelism int, offset int64) io.R
 
 func NewRangedSource(length int64, loader Loader, ranger Ranger) RangedSource {
 	rf := RangedSource{
-		byteRanges: ranger.Ranges(length),
-		loader:     loader,
-		ranger:     ranger,
-		length:     length,
+		cachedByteRanges: ranger.Ranges(length),
+		loader:           loader,
+		ranger:           ranger,
+		length:           length,
 	}
 	return rf
 }
