@@ -7,6 +7,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.1
 	golang.org/x/exp v0.0.0-20230224173230-c95f2b4c22f2
+
 )
 
 require (
