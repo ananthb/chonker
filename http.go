@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -91,7 +90,6 @@ func GetContentLengthViaGET(url *url.URL, client HTTPClient) (int64, error) {
 	if len(contentRangeHeaderParts) < 2 {
 		return 0, errors.New("could not figure out content length")
 	}
-	log.Println("headers", lengthResp.Header)
 	return strconv.ParseInt(contentRangeHeaderParts[1], 10, 64)
 }
 
