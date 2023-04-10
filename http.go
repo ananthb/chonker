@@ -34,7 +34,8 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 	loader := HTTPLoader(req.URL, rhc.client)
 	remoteFile := NewRangedSource(contentLength, loader, rhc.ranger)
-	reader := remoteFile.ParallelReader(context.Background(), rhc.parallelism)
+	var reader io.Reader
+	reader = remoteFile.ParallelReader(context.Background(), rhc.parallelism)
 
 	rangerHeader := req.Header.Get("Range")
 	if rangerHeader != "" {
