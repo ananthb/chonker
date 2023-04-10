@@ -1,7 +1,7 @@
 package ranger
 
 import (
-	"context"
+	"errors"
 	"io"
 
 	"github.com/sourcegraph/conc/stream"
@@ -9,74 +9,110 @@ import (
 
 // RangedSource represents a remote file that can be read in chunks using the given loader.
 type RangedSource struct {
-	cachedByteRanges []ByteRange
-	loader           Loader
-	ranger           Ranger
-	length           int64
+	loader Loader
+	ranger Ranger
+	length int64
 }
 
-// ParallelReader returns an io.Reader that reads the data in parallel, using
+// Reader returns an io.Reader that reads the data in parallel, using
 // a number of goroutines equal to the given parallelism count. Data is still
-// returned in order.
-func (rs RangedSource) ParallelReader(ctx context.Context, parallelism int) io.Reader {
-	return rs.ParallelOffsetReader(ctx, parallelism, 0)
+// returned in order. The rangedReadSeekCloser will start reading at the given offset.
+func (rs RangedSource) Reader(parallelism int) io.ReadSeekCloser {
+	rrsc := &rangedReadSeekCloser{
+		rs:          rs,
+		parallelism: parallelism,
+	}
+	rrsc.init()
+	return rrsc
 }
 
-// ParallelOffsetReader returns an io.Reader that reads the data in parallel, using
-// a number of goroutines equal to the given parallelism count. Data is still
-// returned in order. The reader will start reading at the given offset.
-func (rs RangedSource) ParallelOffsetReader(ctx context.Context, parallelism int, offset int64) io.Reader {
+func (rs RangedSource) Ranges() []ByteRange {
+	return rs.ranger.Ranges(rs.length)
+}
+
+type rangedReadSeekCloser struct {
+	offset             int64
+	rs                 RangedSource
+	r                  *io.PipeReader
+	parallelism        int
+	cancellationSignal chan struct{}
+}
+
+func (rrsc *rangedReadSeekCloser) Read(p []byte) (n int, err error) {
+	return rrsc.r.Read(p)
+}
+
+func (rrsc *rangedReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
+	if whence != io.SeekStart {
+		return 0, errors.New("only io.SeekStart is supported")
+	}
+	_ = rrsc.Close()
+	rrsc.offset = offset
+	rrsc.init()
+	return offset, nil
+}
+
+func (rrsc *rangedReadSeekCloser) Close() error {
+	_ = rrsc.r.Close()
+	rrsc.r = nil
+	go func(sig chan struct{}) {
+		sig <- struct{}{}
+	}(rrsc.cancellationSignal)
+
+	return nil
+}
+
+func (rrsc *rangedReadSeekCloser) init() {
+	rrsc.cancellationSignal = make(chan struct{})
 	var relevantByteRanges []ByteRange
-	for _, br := range rs.cachedByteRanges {
-		if br.To >= offset {
+	for _, br := range rrsc.rs.Ranges() {
+		if br.To >= rrsc.offset {
 			relevantByteRanges = append(relevantByteRanges, br)
 		}
 	}
 
 	r, w := io.Pipe()
-	ctx, cancel := context.WithCancel(ctx)
-	go func() {
+	rrsc.r = r
+
+	go func(offset int64, cancelSig chan struct{}) {
 		defer w.Close()
-		workStream := stream.New().WithMaxGoroutines(parallelism)
+		workStream := stream.New().WithMaxGoroutines(rrsc.parallelism)
 		for _, br := range relevantByteRanges {
 			br := br
-			select {
-			case <-ctx.Done():
-				break
-			default:
-			}
 			workStream.Go(func() stream.Callback {
-				data, err := rs.loader.Load(br)
-				if err != nil {
-					return func() {
-						_ = w.CloseWithError(err)
-						cancel()
-					}
-				}
-				dataOffset := int64(0)
-				if br.Contains(offset) {
-					dataOffset = offset - br.From
-				}
-				return func() {
-					_, err = w.Write(data[dataOffset:])
+				select {
+				case <-cancelSig:
+					return func() {}
+				default:
+					data, err := rrsc.rs.loader.Load(br)
 					if err != nil {
-						cancel()
+						return func() {
+							_ = w.CloseWithError(err)
+						}
+					}
+					dataOffset := int64(0)
+					if br.Contains(offset) {
+						dataOffset = offset - br.From
+					}
+					return func() {
+						_, err = w.Write(data[dataOffset:])
+						if err != nil {
+							_ = w.CloseWithError(err)
+						}
 					}
 				}
+
 			})
 		}
 		workStream.Wait()
-	}()
-
-	return r
+	}(rrsc.offset, rrsc.cancellationSignal)
 }
 
 func NewRangedSource(length int64, loader Loader, ranger Ranger) RangedSource {
 	rf := RangedSource{
-		cachedByteRanges: ranger.Ranges(length),
-		loader:           loader,
-		ranger:           ranger,
-		length:           length,
+		loader: loader,
+		ranger: ranger,
+		length: length,
 	}
 	return rf
 }

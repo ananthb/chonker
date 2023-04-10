@@ -5,7 +5,6 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
-	"net/http/httputil"
 	"testing"
 	"time"
 
@@ -21,8 +20,7 @@ func makeData(size int) []byte {
 
 func makeServer(t *testing.T, content []byte) *httptest.Server {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		dumpRequest, _ := httputil.DumpRequest(request, false)
-		t.Log(time.Now(), string(dumpRequest))
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Microsecond)
 		http.ServeContent(writer, request, "", time.Time{}, bytes.NewReader(content))
 	}))
 	return server

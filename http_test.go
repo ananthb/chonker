@@ -57,16 +57,13 @@ func TestOffsetDownload(t *testing.T) {
 				assert.Equal(t, testCase.expected, servedContent)
 			})
 		}
-
 	}
-
 }
 
 func testClients() []HTTPClient {
 	return []HTTPClient{
-		NewRangingHTTPClient(NewRanger(1000), http.DefaultClient),
-		NewParallelRangingClient(NewRanger(1000), http.DefaultClient, 3),
-		NewParallelRangingClient(NewRanger(1000), http.DefaultClient, 1),
+		NewRangingClient(NewRanger(1000), http.DefaultClient, 3),
+		NewRangingClient(NewRanger(1000), http.DefaultClient, 1),
 		http.DefaultClient,
 	}
 }

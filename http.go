@@ -1,7 +1,6 @@
 package ranger
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +15,32 @@ import (
 // HTTPClient provides an interface allowing us to perform HTTP requests.
 type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
+}
+
+type LimitedReadCloser struct {
+	R io.ReadSeekCloser // underlying reader
+	N int64             // max bytes remaining
+}
+
+func (l *LimitedReadCloser) Seek(offset int64, whence int) (int64, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (l *LimitedReadCloser) Read(p []byte) (n int, err error) {
+	if l.N <= 0 {
+		return 0, io.EOF
+	}
+	if int64(len(p)) > l.N {
+		p = p[0:l.N]
+	}
+	n, err = l.R.Read(p)
+	l.N -= int64(n)
+	return
+}
+
+func (l *LimitedReadCloser) Close() error {
+	return l.R.Close()
 }
 
 // RangingHTTPClient wraps another HTTP client to issue all requests in pre-defined chunks.
@@ -34,8 +59,8 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 	loader := HTTPLoader(req.URL, rhc.client)
 	remoteFile := NewRangedSource(contentLength, loader, rhc.ranger)
-	var reader io.Reader
-	reader = remoteFile.ParallelReader(context.Background(), rhc.parallelism)
+
+	reader := remoteFile.Reader(rhc.parallelism)
 
 	rangerHeader := req.Header.Get("Range")
 	if rangerHeader != "" {
@@ -46,7 +71,12 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		if len(ranges) != 1 {
 			return nil, errors.New("only single range supported")
 		}
-		reader = io.LimitReader(remoteFile.ParallelOffsetReader(context.Background(), rhc.parallelism, ranges[0].Start), ranges[0].Length)
+
+		_, err = reader.Seek(ranges[0].Start, io.SeekStart)
+		if err != nil {
+			return nil, err
+		}
+		reader = &LimitedReadCloser{reader, ranges[0].Length}
 	}
 
 	combinedResponse := &http.Response{
@@ -109,18 +139,11 @@ func GetContentLength(url *url.URL, client HTTPClient) (int64, error) {
 	return headLength, nil
 }
 
-// NewRangingHTTPClient wraps and uses the given HTTPClient to make requests only
-// for chunks designated by the given Ranger. This is useful for downloading large-files from
-// cache-friendly sources in manageable chunks.
-func NewRangingHTTPClient(ranger Ranger, client HTTPClient) RangingHTTPClient {
-	return NewParallelRangingClient(ranger, client, 1)
-}
-
-// NewParallelRangingClient wraps and uses the given HTTPClient to make requests only
+// NewRangingClient wraps and uses the given HTTPClient to make requests only
 // for chunks designated by the given Ranger, but does so in parallel with the given
 // number of goroutines. This is useful for downloading large files from
 // cache-friendly sources in manageable chunks, with the added speed benefits of parallelism.
-func NewParallelRangingClient(ranger Ranger, client HTTPClient, parallelism int) RangingHTTPClient {
+func NewRangingClient(ranger Ranger, client HTTPClient, parallelism int) RangingHTTPClient {
 	return RangingHTTPClient{
 		ranger:      ranger,
 		client:      client,

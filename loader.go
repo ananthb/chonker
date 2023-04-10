@@ -13,7 +13,7 @@ import (
 // `Load` should be safe to call from multiple goroutines.
 //
 // If err is nil, the returned byte slice must always have exactly as many bytes as was
-// asked for, i.e. `len([]byte)` returned must always be equal to `br.Length()`.
+// asked for, i.e. `len([]byte)` returned must always be equal to `br.Ranges()`.
 type Loader interface {
 	Load(br ByteRange) ([]byte, error)
 }
