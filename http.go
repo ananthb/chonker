@@ -17,30 +17,30 @@ type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-type LimitedReadCloser struct {
-	R io.ReadSeekCloser // underlying reader
-	N int64             // max bytes remaining
+type limitedReadCloser struct {
+	R  io.ReadSeekCloser // underlying reader
+	N  int64             // max bytes remaining
+	LR io.Reader
 }
 
-func (l *LimitedReadCloser) Seek(offset int64, whence int) (int64, error) {
-	//TODO implement me
-	panic("implement me")
+func (l *limitedReadCloser) Read(p []byte) (n int, err error) {
+	return l.LR.Read(p)
 }
 
-func (l *LimitedReadCloser) Read(p []byte) (n int, err error) {
-	if l.N <= 0 {
-		return 0, io.EOF
-	}
-	if int64(len(p)) > l.N {
-		p = p[0:l.N]
-	}
-	n, err = l.R.Read(p)
-	l.N -= int64(n)
-	return
+func (l *limitedReadCloser) Seek(offset int64, whence int) (int64, error) {
+	panic("seek not available in this reader")
 }
 
-func (l *LimitedReadCloser) Close() error {
+func (l *limitedReadCloser) Close() error {
 	return l.R.Close()
+}
+
+func newLimitedReadSeekCloser(r io.ReadSeekCloser, n int64) io.ReadSeekCloser {
+	return &limitedReadCloser{
+		R:  r,
+		N:  n,
+		LR: io.LimitReader(r, n),
+	}
 }
 
 // RangingHTTPClient wraps another HTTP client to issue all requests in pre-defined chunks.
@@ -76,13 +76,13 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		if err != nil {
 			return nil, err
 		}
-		reader = &LimitedReadCloser{reader, ranges[0].Length}
+		reader = newLimitedReadSeekCloser(reader, ranges[0].Length)
 	}
 
 	combinedResponse := &http.Response{
 		Status:        "200 OK",
 		StatusCode:    200,
-		Body:          io.NopCloser(reader),
+		Body:          reader,
 		ContentLength: contentLength,
 		Request:       req,
 	}
