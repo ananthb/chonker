@@ -23,17 +23,13 @@ type limitedReadCloser struct {
 	LR io.Reader
 }
 
-func (l *limitedReadCloser) Read(p []byte) (n int, err error) {
-	return l.LR.Read(p)
-}
+func (l *limitedReadCloser) Read(p []byte) (n int, err error) { return l.LR.Read(p) }
 
 func (l *limitedReadCloser) Seek(offset int64, whence int) (int64, error) {
 	panic("seek not available in this reader")
 }
 
-func (l *limitedReadCloser) Close() error {
-	return l.R.Close()
-}
+func (l *limitedReadCloser) Close() error { return l.R.Close() }
 
 func newLimitedReadSeekCloser(r io.ReadSeekCloser, n int64) io.ReadSeekCloser {
 	return &limitedReadCloser{

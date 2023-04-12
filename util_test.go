@@ -35,6 +35,7 @@ func Test_min(t *testing.T) {
 
 func Test_max(t *testing.T) {
 	assert.True(t, max(1, 2) == 2)
+	assert.True(t, max(2, 1) == 2)
 	assert.True(t, max(0, 2) == 2)
 	assert.True(t, max(-2, 2) == 2)
 	assert.True(t, max(2, 2) == 2)

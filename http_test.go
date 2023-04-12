@@ -24,7 +24,6 @@ func TestBasicDownload(t *testing.T) {
 			assert.Equal(t, content, servedContent)
 		})
 	}
-
 }
 
 func TestOffsetDownload(t *testing.T) {
@@ -35,14 +34,9 @@ func TestOffsetDownload(t *testing.T) {
 		rangeHeader string
 		expected    []byte
 	}{
-		{
-			rangeHeader: "bytes=0-1",
-			expected:    content[0:2],
-		},
-		{
-			rangeHeader: "bytes=5-",
-			expected:    content[5:],
-		},
+		{rangeHeader: "bytes=0-1", expected: content[0:2]},
+		{rangeHeader: "bytes=9-", expected: content[9:]},
+		{rangeHeader: "bytes=5-", expected: content[5:]},
 	}
 	for _, testCase := range testTable {
 		for clientIndex, client := range testClients() {

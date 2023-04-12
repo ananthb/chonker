@@ -22,7 +22,8 @@ func (rs RangedSource) Reader(parallelism int) io.ReadSeekCloser {
 		rs:          rs,
 		parallelism: parallelism,
 	}
-	rrsc.init()
+	// don't init the reader here, because we want to be able to seek
+	// without wasting loads.
 	return rrsc
 }
 
@@ -40,6 +41,9 @@ type rangedReadSeekCloser struct {
 }
 
 func (rrsc *rangedReadSeekCloser) Read(p []byte) (n int, err error) {
+	if rrsc.r == nil {
+		rrsc.init()
+	}
 	return rrsc.r.Read(p)
 }
 
@@ -67,7 +71,9 @@ func (rrsc *rangedReadSeekCloser) Seek(offset int64, whence int) (int64, error) 
 }
 
 func (rrsc *rangedReadSeekCloser) Close() error {
-	_ = rrsc.r.Close()
+	if rrsc.r != nil {
+		_ = rrsc.r.Close()
+	}
 	rrsc.r = nil
 	go func(sig chan struct{}) {
 		sig <- struct{}{}
@@ -104,12 +110,12 @@ func (rrsc *rangedReadSeekCloser) init() {
 							_ = w.CloseWithError(err)
 						}
 					}
-					dataOffset := int64(0)
+					chunkOffset := int64(0)
 					if br.Contains(offset) {
-						dataOffset = offset - br.From
+						chunkOffset = offset - br.From
 					}
 					return func() {
-						_, err = w.Write(data[dataOffset:])
+						_, err = w.Write(data[chunkOffset:])
 						if err != nil {
 							_ = w.CloseWithError(err)
 						}
