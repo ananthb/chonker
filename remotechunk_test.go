@@ -51,6 +51,36 @@ func TestReaderOffset(t *testing.T) {
 	}
 }
 
+func TestRangedReadSeekCloser_Seek(t *testing.T) {
+	ranger := NewRanger(2)
+	data := makeData(10)
+	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
+		return data[br.From : br.To+1], nil
+	}), ranger)
+	pr := rf.Reader(3)
+	table := []struct {
+		offset         int64
+		whence         int
+		expectedOffset int64
+	}{
+		{0, io.SeekStart, 0},
+		{5, io.SeekStart, 5},
+		{0, io.SeekEnd, 10},
+		{-1, io.SeekEnd, 9},
+		{-2, io.SeekEnd, 8},
+		{0, io.SeekCurrent, 8},
+		{-1, io.SeekCurrent, 7},
+		{2, io.SeekCurrent, 9},
+	}
+	for _, tc := range table {
+		t.Run(strconv.Itoa(int(tc.offset))+"/"+strconv.Itoa(int(tc.whence)), func(t *testing.T) {
+			newOffset, err := pr.Seek(tc.offset, tc.whence)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedOffset, newOffset)
+		})
+	}
+}
+
 func TestReaderLeaks(t *testing.T) {
 	ranger := NewRanger(2)
 	data := makeData(10)

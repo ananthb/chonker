@@ -36,6 +36,7 @@ type rangedReadSeekCloser struct {
 	r                  *io.PipeReader
 	parallelism        int
 	cancellationSignal chan struct{}
+	io.ReadSeekCloser
 }
 
 func (rrsc *rangedReadSeekCloser) Read(p []byte) (n int, err error) {
@@ -43,13 +44,26 @@ func (rrsc *rangedReadSeekCloser) Read(p []byte) (n int, err error) {
 }
 
 func (rrsc *rangedReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
-	if whence != io.SeekStart {
-		return 0, errors.New("only io.SeekStart is supported")
+	var newOffset int64
+	switch whence {
+	case io.SeekStart:
+		newOffset = offset
+	case io.SeekCurrent:
+		newOffset = rrsc.offset + offset
+	case io.SeekEnd:
+		newOffset = rrsc.rs.length + offset
+	default:
+		return 0, errors.New("invalid whence value")
 	}
+
+	if newOffset < 0 || newOffset > rrsc.rs.length {
+		return 0, errors.New("seek out of bounds")
+	}
+
 	_ = rrsc.Close()
-	rrsc.offset = offset
+	rrsc.offset = newOffset
 	rrsc.init()
-	return offset, nil
+	return newOffset, nil
 }
 
 func (rrsc *rangedReadSeekCloser) Close() error {
