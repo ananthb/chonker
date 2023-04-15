@@ -8,9 +8,9 @@ import (
 )
 
 func makeData(size int) []byte {
-	rand.Seed(42)
+	rnd := rand.New(rand.NewSource(42))
 	content := make([]byte, size)
-	rand.Read(content)
+	rnd.Read(content)
 	return content
 }
 
