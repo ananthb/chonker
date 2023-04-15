@@ -54,8 +54,8 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 	crw := newCustomResponseWriter()
 	go func() {
-		defer crw.pw.Close()
 		http.ServeContent(crw, req, "", time.Time{}, reader)
+		_ = crw.pw.Close()
 	}()
 
 	resp := &http.Response{
