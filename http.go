@@ -8,8 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-
-	"github.com/gotd/contrib/http_range"
+	"time"
 )
 
 // HTTPClient provides an interface allowing us to perform HTTP requests.
@@ -17,27 +16,23 @@ type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-type limitedReadCloser struct {
-	R  io.ReadSeekCloser // underlying reader
-	N  int64             // max bytes remaining
-	LR io.Reader
+type customResponseWriter struct {
+	header http.Header
+	pr     *io.PipeReader
+	pw     *io.PipeWriter
 }
 
-func (l *limitedReadCloser) Read(p []byte) (n int, err error) { return l.LR.Read(p) }
-
-func (l *limitedReadCloser) Seek(offset int64, whence int) (int64, error) {
-	panic("seek not available in this reader")
-}
-
-func (l *limitedReadCloser) Close() error { return l.R.Close() }
-
-func newLimitedReadSeekCloser(r io.ReadSeekCloser, n int64) io.ReadSeekCloser {
-	return &limitedReadCloser{
-		R:  r,
-		N:  n,
-		LR: io.LimitReader(r, n),
+func newCustomResponseWriter() *customResponseWriter {
+	pr, pw := io.Pipe()
+	return &customResponseWriter{
+		header: http.Header{},
+		pr:     pr,
+		pw:     pw,
 	}
 }
+func (w *customResponseWriter) Header() http.Header         { return w.header }
+func (w *customResponseWriter) Write(b []byte) (int, error) { return w.pw.Write(b) }
+func (w *customResponseWriter) WriteHeader(_ int)           {}
 
 // RangingHTTPClient wraps another HTTP client to issue all requests in pre-defined chunks.
 type RangingHTTPClient struct {
@@ -55,35 +50,23 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 	loader := HTTPLoader(req.URL, rhc.client)
 	remoteFile := NewRangedSource(contentLength, loader, rhc.ranger)
-
 	reader := remoteFile.Reader(rhc.parallelism)
 
-	rangerHeader := req.Header.Get("Range")
-	if rangerHeader != "" {
-		ranges, err := http_range.ParseRange(rangerHeader, contentLength)
-		if err != nil {
-			return nil, err
-		}
-		if len(ranges) != 1 {
-			return nil, errors.New("only single range supported")
-		}
+	crw := newCustomResponseWriter()
+	go func() {
+		defer crw.pw.Close()
+		http.ServeContent(crw, req, "", time.Time{}, reader)
+	}()
 
-		_, err = reader.Seek(ranges[0].Start, io.SeekStart)
-		if err != nil {
-			return nil, err
-		}
-		reader = newLimitedReadSeekCloser(reader, ranges[0].Length)
-	}
-
-	combinedResponse := &http.Response{
-		Status:        "200 OK",
+	resp := &http.Response{
+		Status:        http.StatusText(200),
 		StatusCode:    200,
-		Body:          reader,
+		Body:          crw.pr,
 		ContentLength: contentLength,
 		Request:       req,
 	}
 
-	return combinedResponse, nil
+	return resp, nil
 }
 
 // GetContentLengthViaHEAD returns the content length of the given URL, using the given HTTPClient. It

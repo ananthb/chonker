@@ -9,11 +9,7 @@ import (
 )
 
 func TestReader(t *testing.T) {
-	ranger := NewRanger(2)
-	data := makeData(10)
-	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
-		return data[br.From : br.To+1], nil
-	}), ranger)
+	data, rf := createTestData()
 	pr := rf.Reader(3)
 	received, err := io.ReadAll(pr)
 	assert.NoError(t, err)
@@ -21,11 +17,7 @@ func TestReader(t *testing.T) {
 }
 
 func TestReaderOffset(t *testing.T) {
-	ranger := NewRanger(2)
-	data := makeData(10)
-	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
-		return data[br.From : br.To+1], nil
-	}), ranger)
+	data, rf := createTestData()
 
 	table := []struct {
 		offset int64
@@ -52,11 +44,7 @@ func TestReaderOffset(t *testing.T) {
 }
 
 func TestRangedReadSeekCloser_Seek(t *testing.T) {
-	ranger := NewRanger(2)
-	data := makeData(10)
-	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
-		return data[br.From : br.To+1], nil
-	}), ranger)
+	_, rf := createTestData()
 	pr := rf.Reader(3)
 	table := []struct {
 		offset         int64
@@ -92,4 +80,13 @@ func TestReaderLeaks(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, data[:4], received)
 	pr.(io.ReadCloser).Close()
+}
+
+func createTestData() ([]byte, RangedSource) {
+	ranger := NewRanger(2)
+	data := makeData(10)
+	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
+		return data[br.From : br.To+1], nil
+	}), ranger)
+	return data, rf
 }

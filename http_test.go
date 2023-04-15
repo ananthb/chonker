@@ -1,17 +1,21 @@
 package ranger
 
 import (
+	"bytes"
 	"io"
+	"math/rand"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBasicDownload(t *testing.T) {
 	content := makeData(10000)
-	server := makeServer(t, content)
+	server := makeHTTPServer(t, content)
 
 	for clientIndex, client := range testClients() {
 		t.Run("client:"+strconv.Itoa(clientIndex+1), func(t *testing.T) {
@@ -28,7 +32,7 @@ func TestBasicDownload(t *testing.T) {
 
 func TestOffsetDownload(t *testing.T) {
 	content := makeData(10)
-	server := makeServer(t, content)
+	server := makeHTTPServer(t, content)
 
 	testTable := []struct {
 		rangeHeader string
@@ -60,4 +64,12 @@ func testClients() []HTTPClient {
 		NewRangingClient(NewRanger(1000), http.DefaultClient, 1),
 		http.DefaultClient,
 	}
+}
+
+func makeHTTPServer(t *testing.T, content []byte) *httptest.Server {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Microsecond)
+		http.ServeContent(writer, request, "", time.Time{}, bytes.NewReader(content))
+	}))
+	return server
 }
