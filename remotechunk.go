@@ -44,7 +44,9 @@ func (rrsc *rangedReadSeekCloser) Read(p []byte) (n int, err error) {
 	if rrsc.r == nil {
 		rrsc.init()
 	}
-	return rrsc.r.Read(p)
+	n, err = rrsc.r.Read(p)
+	rrsc.offset += int64(n)
+	return n, err
 }
 
 func (rrsc *rangedReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
@@ -66,7 +68,7 @@ func (rrsc *rangedReadSeekCloser) Seek(offset int64, whence int) (int64, error) 
 
 	_ = rrsc.Close()
 	rrsc.offset = newOffset
-	rrsc.init()
+
 	return newOffset, nil
 }
 

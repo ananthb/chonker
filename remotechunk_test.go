@@ -4,6 +4,7 @@ import (
 	"io"
 	"strconv"
 	"testing"
+	"testing/iotest"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -14,6 +15,12 @@ func TestReader(t *testing.T) {
 	received, err := io.ReadAll(pr)
 	assert.NoError(t, err)
 	assert.Equal(t, data, received)
+}
+
+func TestReaderBuiltin(t *testing.T) {
+	data, rf := createTestData()
+	pr := rf.Reader(3)
+	assert.NoError(t, iotest.TestReader(pr, data))
 }
 
 func TestReaderOffset(t *testing.T) {
