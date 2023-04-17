@@ -16,6 +16,30 @@ type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+func HTTPLoader(url *url.URL, client HTTPClient) Loader {
+	return LoaderFunc(func(br ByteRange) ([]byte, error) {
+		partReq, err := http.NewRequest("GET", url.String(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("error building GET request for segment %v: %w", br.RangeHeader(), err)
+		}
+
+		partReq.Header.Set("Range", br.RangeHeader())
+
+		partResp, err := client.Do(partReq)
+		if err != nil {
+			return nil, fmt.Errorf("error making the request for segment %v: %w", br.RangeHeader(), err)
+		}
+
+		data, err := io.ReadAll(partResp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("error reading data for segment %v: %w", br.RangeHeader(), err)
+		}
+
+		_ = partResp.Body.Close()
+		return data, nil
+	})
+}
+
 type customResponseWriter struct {
 	header http.Header
 	pr     *io.PipeReader
