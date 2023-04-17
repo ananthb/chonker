@@ -29,3 +29,6 @@ jobs:
 
     - name: Race Test
       run: go test --race -v ./...
+    
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v3.4.0
