@@ -1,6 +1,7 @@
 package ranger
 
 import (
+	"errors"
 	"io"
 	"strconv"
 	"testing"
@@ -77,16 +78,34 @@ func TestRangedReadSeekCloser_Seek(t *testing.T) {
 }
 
 func TestReaderLeaks(t *testing.T) {
-	ranger := NewRanger(2)
-	data := makeData(10)
-	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
-		return data[br.From : br.To+1], nil
-	}), ranger)
+	data, rf := createTestData()
 	pr := rf.Reader(2)
 	received, err := io.ReadAll(io.LimitReader(pr, 4))
 	assert.NoError(t, err)
 	assert.Equal(t, data[:4], received)
-	pr.(io.ReadCloser).Close()
+	_ = pr.(io.ReadCloser).Close()
+}
+
+func TestLoaderErrors(t *testing.T) {
+	ranger := NewRanger(2)
+	data := makeData(10)
+	testErr := errors.New("test error")
+	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
+		return nil, testErr
+	}), ranger)
+	pr := rf.Reader(2)
+	_, err := io.ReadAll(pr)
+	assert.ErrorIs(t, err, testErr)
+}
+
+func TestSeekErrors(t *testing.T) {
+	_, rf := createTestData()
+	pr := rf.Reader(2)
+	_, err := pr.Seek(42, io.SeekEnd)
+	assert.ErrorContains(t, err, "out of bounds")
+
+	_, err = pr.Seek(0, 42)
+	assert.ErrorContains(t, err, "invalid whence")
 }
 
 func createTestData() ([]byte, RangedSource) {
