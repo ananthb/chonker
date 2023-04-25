@@ -14,10 +14,17 @@ type RangedSource struct {
 	length int64
 }
 
+type RemoteReader interface {
+	io.Reader
+	io.Seeker
+	io.Closer
+	io.ReaderAt
+}
+
 // Reader returns an io.Reader that reads the data in parallel, using
 // a number of goroutines equal to the given parallelism count. Data is still
 // returned in order. The rangedReadSeekCloser will start reading at the given offset.
-func (rs RangedSource) Reader(parallelism int) io.ReadSeekCloser {
+func (rs RangedSource) Reader(parallelism int) RemoteReader {
 	rrsc := &rangedReadSeekCloser{
 		rs:          rs,
 		parallelism: parallelism,
@@ -37,7 +44,23 @@ type rangedReadSeekCloser struct {
 	r                  *io.PipeReader
 	parallelism        int
 	cancellationSignal chan struct{}
-	io.ReadSeekCloser
+}
+
+func (rrsc *rangedReadSeekCloser) ReadAt(p []byte, off int64) (n int, err error) {
+	clone := &rangedReadSeekCloser{
+		rs:          rrsc.rs,
+		parallelism: rrsc.parallelism,
+	}
+	_, err = clone.Seek(off, io.SeekStart)
+	if err != nil {
+		return 0, err
+	}
+	n, err = io.ReadFull(clone, p)
+	if err == io.ErrUnexpectedEOF {
+		err = io.EOF
+	}
+	return n, err
+
 }
 
 func (rrsc *rangedReadSeekCloser) Read(p []byte) (n int, err error) {

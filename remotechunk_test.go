@@ -19,12 +19,16 @@ func TestReader(t *testing.T) {
 }
 
 func TestReaderBuiltin(t *testing.T) {
-	data, rf := createTestData()
+	ranger := NewRanger(100)
+	data := makeData(1000)
+	rf := NewRangedSource(int64(len(data)), LoaderFunc(func(br ByteRange) ([]byte, error) {
+		return data[br.From : br.To+1], nil
+	}), ranger)
 	pr := rf.Reader(3)
 	assert.NoError(t, iotest.TestReader(pr, data))
 }
 
-func TestReaderOffset(t *testing.T) {
+func TestReader_Offsets(t *testing.T) {
 	data, rf := createTestData()
 
 	table := []struct {
@@ -51,7 +55,35 @@ func TestReaderOffset(t *testing.T) {
 	}
 }
 
-func TestRangedReadSeekCloser_Seek(t *testing.T) {
+func TestReader_ReadAt(t *testing.T) {
+	data, rf := createTestData()
+
+	table := []struct {
+		offset int64
+		len    int64
+		data   []byte
+		err    error
+	}{
+		{5, 2, data[5:7], nil},
+		{5, 5, data[5:], nil},
+		{5, 20, data[5:], io.EOF},
+	}
+	for _, tc := range table {
+		t.Run(strconv.Itoa(int(tc.offset)), func(t *testing.T) {
+			pr := rf.Reader(3)
+			received := make([]byte, tc.len)
+			_, err := pr.ReadAt(received, tc.offset)
+			if tc.err != nil {
+				assert.ErrorIs(t, err, tc.err)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tc.data, received[:len(tc.data)])
+		})
+	}
+}
+
+func TestReader_Seek(t *testing.T) {
 	_, rf := createTestData()
 	pr := rf.Reader(3)
 	table := []struct {
