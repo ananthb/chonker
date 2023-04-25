@@ -17,7 +17,7 @@ type HTTPClient interface {
 }
 
 func HTTPLoader(url *url.URL, client HTTPClient) Loader {
-	return LoaderFunc(func(br ByteRange) ([]byte, error) {
+	return NewSingleFlightLoader(LoaderFunc(func(br ByteRange) ([]byte, error) {
 		partReq, err := http.NewRequest("GET", url.String(), nil)
 		if err != nil {
 			return nil, fmt.Errorf("error building GET request for segment %v: %w", br.RangeHeader(), err)
@@ -37,7 +37,7 @@ func HTTPLoader(url *url.URL, client HTTPClient) Loader {
 
 		_ = partResp.Body.Close()
 		return data, nil
-	})
+	}))
 }
 
 type customResponseWriter struct {

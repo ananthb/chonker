@@ -5,7 +5,8 @@ go 1.20
 require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.2
-	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
+	golang.org/x/exp v0.0.0-20230425010034-47ecfdc1ba53
+	golang.org/x/sync v0.1.0
 
 )
 

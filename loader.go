@@ -1,5 +1,7 @@
 package ranger
 
+import "golang.org/x/sync/singleflight"
+
 // Loader implements a Load method that provides data as byte slice for a
 // given byte range chunk.
 //
@@ -16,4 +18,14 @@ type LoaderFunc func(br ByteRange) ([]byte, error)
 
 func (l LoaderFunc) Load(br ByteRange) ([]byte, error) {
 	return l(br)
+}
+
+func NewSingleFlightLoader(loader Loader) Loader {
+	sg := singleflight.Group{}
+	return LoaderFunc(func(br ByteRange) ([]byte, error) {
+		data, err, _ := sg.Do(br.RangeHeader(), func() (interface{}, error) {
+			return loader.Load(br)
+		})
+		return data.([]byte), err
+	})
 }
