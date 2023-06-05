@@ -1,5 +1,7 @@
 # RANGER
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/sudhirj/ranger.svg)](https://pkg.go.dev/github.com/sudhirj/ranger)
+
 *Download large files in parallel chunks in Go.*
 
 ### Why? 
