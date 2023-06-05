@@ -58,10 +58,10 @@ func TestOffsetDownload(t *testing.T) {
 	}
 }
 
-func testClients() []HTTPClient {
-	return []HTTPClient{
-		NewRangingClient(NewRanger(1000), http.DefaultClient, 3),
-		NewRangingClient(NewRanger(1000), http.DefaultClient, 1),
+func testClients() []*http.Client {
+	return []*http.Client{
+		NewRangingClient(NewRanger(1000), http.DefaultClient, 3).StandardClient(),
+		NewRangingClient(NewRanger(1000), http.DefaultClient, 1).StandardClient(),
 		http.DefaultClient,
 	}
 }

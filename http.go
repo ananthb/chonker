@@ -8,15 +8,15 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
-// HTTPClient provides an interface allowing us to perform HTTP requests.
-type HTTPClient interface {
-	Do(req *http.Request) (*http.Response, error)
-}
+const (
+	defaultParallelism = 10
+)
 
-func HTTPLoader(url *url.URL, client HTTPClient) Loader {
+func HTTPLoader(url *url.URL, client *http.Client) Loader {
 	return NewSingleFlightLoader(LoaderFunc(func(br ByteRange) ([]byte, error) {
 		partReq, err := http.NewRequest("GET", url.String(), nil)
 		if err != nil {
@@ -60,9 +60,8 @@ func (w *customResponseWriter) WriteHeader(_ int)           {}
 
 // RangingHTTPClient wraps another HTTP client to issue all requests in pre-defined chunks.
 type RangingHTTPClient struct {
-	client HTTPClient
-	ranger Ranger
-	HTTPClient
+	client      *http.Client
+	ranger      Ranger
 	parallelism int
 }
 
@@ -93,9 +92,50 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
+// StandardClient returns a standard HTTP client that wraps a ranging HTTP client.
+func (rhc *RangingHTTPClient) StandardClient() *http.Client {
+	return &http.Client{
+		Transport: &RoundTripper{RangingClient: rhc},
+	}
+}
+
+// RoundTripper implements the http.RoundTripper interface, using a ranging
+// HTTP client to execute requests.
+type RoundTripper struct {
+	// The client to use during requests. If nil, a default ranging client is used.
+	RangingClient *RangingHTTPClient
+
+	// once ensures that the logic to initialize the default client runs at
+	// most once, in a single thread.
+	once sync.Once
+}
+
+// init initializes the underlying ranging client.
+func (rt *RoundTripper) init() {
+	if rt.RangingClient == nil {
+		ranger := NewRanger(0)
+		rt.RangingClient = NewRangingClient(ranger, &http.Client{}, 0)
+	}
+}
+
+// RoundTrip satisfies the http.RoundTripper interface.
+func (rt *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	rt.once.Do(rt.init)
+
+	// Execute the request.
+	resp, err := rt.RangingClient.Do(req)
+	// If we got an error returned by standard library's `Do` method, unwrap it
+	// otherwise we will wind up erroneously re-nesting the error.
+	if _, ok := err.(*url.Error); ok {
+		return resp, errors.Unwrap(err)
+	}
+
+	return resp, err
+}
+
 // GetContentLengthViaHEAD returns the content length of the given URL, using the given HTTPClient. It
 // uses a HEAD request to get the content length.
-func GetContentLengthViaHEAD(url *url.URL, client HTTPClient) (int64, error) {
+func GetContentLengthViaHEAD(url *url.URL, client *http.Client) (int64, error) {
 	headReq, err := http.NewRequest("HEAD", url.String(), nil)
 	if err != nil {
 		return 0, err
@@ -110,7 +150,7 @@ func GetContentLengthViaHEAD(url *url.URL, client HTTPClient) (int64, error) {
 
 // GetContentLengthViaGET returns the content length of the given URL, using the given HTTPClient. It
 // uses a GET request with a zeroed Range header to get the content length.
-func GetContentLengthViaGET(url *url.URL, client HTTPClient) (int64, error) {
+func GetContentLengthViaGET(url *url.URL, client *http.Client) (int64, error) {
 	lengthReq, err := http.NewRequest("GET", url.String(), nil)
 	if err != nil {
 		return 0, err
@@ -129,7 +169,7 @@ func GetContentLengthViaGET(url *url.URL, client HTTPClient) (int64, error) {
 
 // GetContentLength returns the content length of the given URL, using the given HTTPClient. It first
 // attempts to use the HEAD method, but if that fails, falls back to using the GET method.
-func GetContentLength(url *url.URL, client HTTPClient) (int64, error) {
+func GetContentLength(url *url.URL, client *http.Client) (int64, error) {
 	headLength, headErr := GetContentLengthViaHEAD(url, client)
 	if headErr != nil {
 		length, getErr := GetContentLengthViaGET(url, client)
@@ -142,12 +182,15 @@ func GetContentLength(url *url.URL, client HTTPClient) (int64, error) {
 	return headLength, nil
 }
 
-// NewRangingClient wraps and uses the given HTTPClient to make requests only
+// NewRangingClient wraps and uses the given http.Client to make requests only
 // for chunks designated by the given Ranger, but does so in parallel with the given
 // number of goroutines. This is useful for downloading large files from
 // cache-friendly sources in manageable chunks, with the added speed benefits of parallelism.
-func NewRangingClient(ranger Ranger, client HTTPClient, parallelism int) RangingHTTPClient {
-	return RangingHTTPClient{
+func NewRangingClient(ranger Ranger, client *http.Client, parallelism int) *RangingHTTPClient {
+	if parallelism < 1 {
+		parallelism = defaultParallelism
+	}
+	return &RangingHTTPClient{
 		ranger:      ranger,
 		client:      client,
 		parallelism: parallelism,

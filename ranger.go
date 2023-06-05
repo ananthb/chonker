@@ -1,11 +1,20 @@
 package ranger
 
+const (
+	defaultChunkSize = 1024 * 1024 // 1MB
+)
+
 // Ranger can split a file into chunks of a given size.
 type Ranger struct {
 	chunkSize int64
 }
 
+// NewRanger creates a new Ranger with the given chunk size.
+// If the chunk size is <= 0, the default chunk size is used.
 func NewRanger(chunkSize int64) Ranger {
+	if chunkSize <= 0 {
+		chunkSize = defaultChunkSize
+	}
 	return Ranger{chunkSize: chunkSize}
 }
 

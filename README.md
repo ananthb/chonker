@@ -20,17 +20,12 @@ Two, it downloads upcoming chunks in parallel, so if the parallelism count is se
 
 The lowest-level usage is to create a new `Ranger` with chunk size and parallelism, and a fetcher function passed in. When the `Ranger` is invoked with a file length, it calls the fetch function with the byte range, in parallel, and collects and orders the resulting chunk Readers. This is a low level API that you can use if you have a custom protocol to fetch data. 
 
-For regular use, Ranger provides an `HTTPClient` wrapper that wraps any other `HTTPClient`. Calls made to `GET` files will use the wrapped client to check file length using a `HEAD` request, and then range over the chunks using the given chunk size and parallelism parameters.
+For regular use, `RangingHTTPClient` uses a given `http.Client` to fetch chunks
+as configured. `RangingHTTPClient` also exposes a standard `http.Client` via the
+`RangingHTTPClient.StandardClient` method. The returned client will fetch chunk
+ranges using the `RangingHTTPClient`.
 
-This means that Ranger integrates well on both sides - it can be passed as a custom `HTTPClient` to download managers like [Grab](https://github.com/cavaliergopher/grab), while wrapping other `HTTPClient`s that provide automatic retry and other features like [Heimdall](https://github.com/gojek/heimdall) or [go-retryablehttp](https://github.com/hashicorp/go-retryablehttp).
-
-
-
-
-
-
-
-
-
-
-
+This means that Ranger integrates well on both sides - [Grab](https://github.com/cavaliergopher/grab)
+and other download managers can use a ranging client via a standard `http.Client`,
+while wrapping other `HTTPClient`s that provide automatic retry, etc
+like [Heimdall](https://github.com/gojek/heimdall) or [go-retryablehttp](https://github.com/hashicorp/go-retryablehttp).
