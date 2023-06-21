@@ -3,6 +3,7 @@ module github.com/sudhirj/ranger
 go 1.20
 
 require (
+	github.com/dsnet/golib/memfile v1.0.0
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.2
 	golang.org/x/exp v0.0.0-20230425010034-47ecfdc1ba53
