@@ -6,14 +6,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
-)
-
-const (
-	defaultParallelism = 10
 )
 
 func HTTPLoader(url *url.URL, client *http.Client) Loader {
@@ -65,7 +61,7 @@ type RangingHTTPClient struct {
 	parallelism int
 }
 
-func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
+func (rhc RangingHTTPClient) RoundTrip(req *http.Request) (*http.Response, error) {
 	contentLength, err := GetContentLength(req.URL, rhc.client)
 	if err != nil {
 		return nil, fmt.Errorf("error getting content length: %w", err)
@@ -90,47 +86,6 @@ func (rhc RangingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	return resp, nil
-}
-
-// StandardClient returns a standard HTTP client that wraps a ranging HTTP client.
-func (rhc *RangingHTTPClient) StandardClient() *http.Client {
-	return &http.Client{
-		Transport: &RoundTripper{RangingClient: rhc},
-	}
-}
-
-// RoundTripper implements the http.RoundTripper interface, using a ranging
-// HTTP client to execute requests.
-type RoundTripper struct {
-	// The client to use during requests. If nil, a default ranging client is used.
-	RangingClient *RangingHTTPClient
-
-	// once ensures that the logic to initialize the default client runs at
-	// most once, in a single thread.
-	once sync.Once
-}
-
-// init initializes the underlying ranging client.
-func (rt *RoundTripper) init() {
-	if rt.RangingClient == nil {
-		ranger := NewRanger(0)
-		rt.RangingClient = NewRangingClient(ranger, &http.Client{}, 0)
-	}
-}
-
-// RoundTrip satisfies the http.RoundTripper interface.
-func (rt *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	rt.once.Do(rt.init)
-
-	// Execute the request.
-	resp, err := rt.RangingClient.Do(req)
-	// If we got an error returned by standard library's `Do` method, unwrap it
-	// otherwise we will wind up erroneously re-nesting the error.
-	if _, ok := err.(*url.Error); ok {
-		return resp, errors.Unwrap(err)
-	}
-
-	return resp, err
 }
 
 // GetContentLengthViaHEAD returns the content length of the given URL, using the given HTTPClient. It
@@ -188,7 +143,7 @@ func GetContentLength(url *url.URL, client *http.Client) (int64, error) {
 // cache-friendly sources in manageable chunks, with the added speed benefits of parallelism.
 func NewRangingClient(ranger Ranger, client *http.Client, parallelism int) *RangingHTTPClient {
 	if parallelism < 1 {
-		parallelism = defaultParallelism
+		parallelism = runtime.NumCPU()
 	}
 	return &RangingHTTPClient{
 		ranger:      ranger,

@@ -14,7 +14,7 @@ import (
 )
 
 func TestBasicDownload(t *testing.T) {
-	content := makeData(10000)
+	content := makeData(1000)
 	server := makeHTTPServer(t, content)
 
 	for clientIndex, client := range testClients() {
@@ -60,8 +60,11 @@ func TestOffsetDownload(t *testing.T) {
 
 func testClients() []*http.Client {
 	return []*http.Client{
-		NewRangingClient(NewRanger(1000), http.DefaultClient, 3).StandardClient(),
-		NewRangingClient(NewRanger(1000), http.DefaultClient, 1).StandardClient(),
+		{Transport: NewRangingClient(NewRanger(100), http.DefaultClient, 3)},
+		{Transport: NewRangingClient(NewRanger(10), http.DefaultClient, 3)},
+		{Transport: NewRangingClient(NewRanger(10000), http.DefaultClient, 3)},
+		{Transport: NewRangingClient(NewRanger(1024), http.DefaultClient, 1)},
+		{Transport: NewRangingClient(NewRanger(100), http.DefaultClient, 0)},
 		http.DefaultClient,
 	}
 }
