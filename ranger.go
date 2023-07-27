@@ -36,3 +36,23 @@ func (r Ranger) Index(i int64) int {
 	// we want a math.floor on the index / chunk size - this gives us the index of the chunk
 	return int(i / r.chunkSize)
 }
+
+type SizedRanger struct {
+	length int64
+	ranger Ranger
+}
+
+func (r SizedRanger) Length() int64 {
+	return r.length
+}
+
+func (r SizedRanger) At(offset int64) ByteRange {
+	return r.ranger.Ranges(r.length)[r.ranger.Index(offset)]
+}
+
+func NewSizedRanger(length int64, ranger Ranger) SizedRanger {
+	return SizedRanger{
+		length: length,
+		ranger: ranger,
+	}
+}
