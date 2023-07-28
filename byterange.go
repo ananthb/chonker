@@ -1,6 +1,9 @@
 package ranger
 
-import "fmt"
+import (
+	"fmt"
+	"net/http"
+)
 
 // ByteRange represents a range of bytes available in a file
 type ByteRange struct {
@@ -21,4 +24,19 @@ func (br ByteRange) Length() int64 {
 
 func (br ByteRange) Contains(offset int64) bool {
 	return br.From <= offset && offset <= br.To
+}
+
+func (br ByteRange) Floor(offset int64) ByteRange {
+	return ByteRange{
+		From: max(br.From, offset),
+		To:   br.To,
+	}
+}
+
+func (br ByteRange) Request(url string) (req *http.Request, err error) {
+	req, err = http.NewRequest(http.MethodGet, url, nil)
+	if err == nil {
+		req.Header.Set("Range", br.RangeHeader())
+	}
+	return
 }

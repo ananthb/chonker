@@ -1,6 +1,7 @@
 package ranger
 
 import (
+	"errors"
 	"io"
 	"net/http"
 )
@@ -22,40 +23,55 @@ func (s *seqReader) Read(p []byte) (n int, err error) {
 	n, err = s.current.Read(p)
 	s.offset += int64(n)
 	if err == io.EOF { // we have read all the bytes from the current range, close it
-		_ = s.Close()
-		s.current = nil // the next Read will open the next range
+		s.reset()
+		if s.offset < s.ranger.Length() {
+			err = nil // we still have bytes to read, so we don't want to return EOF
+		}
 	}
-	if err == io.EOF && s.offset < s.ranger.Length() { // we have more ranges to read, don't send EOF
-		err = nil
-	}
-
 	return n, err
 }
 
-func (s *seqReader) prepare() error {
-	if s.current == nil {
-		br := s.ranger.At(s.offset)
-		resp, err := s.makeRangeRequest(br)
-		if err != nil {
-			return err
-		}
+func (s *seqReader) prepare() (err error) {
+	if s.current != nil {
+		return
+	}
+	br := s.ranger.At(s.offset).Floor(s.offset) // get the relevant byte range and start it from the current offset (needed for seek)
+	resp, err := s.makeRangeRequest(br)
+	if err == nil {
 		s.current = resp.Body
 	}
-	return nil
+	return
 }
 
-func (s *seqReader) makeRangeRequest(br ByteRange) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, s.url, nil)
-	if err != nil {
-		return nil, err
+func (s *seqReader) makeRangeRequest(br ByteRange) (resp *http.Response, err error) {
+	req, err := br.Request(s.url)
+	if err == nil {
+		resp, err = s.client.Do(req)
 	}
-	req.Header.Set("Range", br.RangeHeader())
-	return s.client.Do(req)
+	return
 }
 
 func (s *seqReader) Seek(offset int64, whence int) (int64, error) {
-	//TODO implement me
-	panic("implement me")
+	var newOffset int64
+	switch whence {
+	case io.SeekStart:
+		newOffset = offset
+	case io.SeekCurrent:
+		newOffset = s.offset + offset
+	case io.SeekEnd:
+		newOffset = s.ranger.length + offset
+	default:
+		return 0, errors.New("invalid whence value")
+	}
+
+	if newOffset < 0 || newOffset > s.ranger.length {
+		return 0, errors.New("seek out of bounds")
+	}
+
+	s.reset()
+	s.offset = newOffset
+
+	return newOffset, nil
 }
 
 func (s *seqReader) Close() error {
@@ -65,6 +81,16 @@ func (s *seqReader) Close() error {
 	return nil
 }
 
+func (s *seqReader) reset() {
+	if s.current != nil {
+		_ = s.Close()
+	}
+	s.current = nil // the next Read will open the next range
+}
+
+// NewSeqReader returns a new io.ReadSeekCloser that reads from the given url using the given client. Instead of
+// reading the whole file at once, it reads the file in sequential chunks, using the given ranger to determine the
+// ranges to read. This allows for reading very large files in CDN-cacheable chunks using RANGE GETs.
 func NewSeqReader(client *http.Client, url string, ranger SizedRanger) io.ReadSeekCloser {
 	return &seqReader{
 		url:    url,
