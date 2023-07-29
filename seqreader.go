@@ -2,6 +2,8 @@ package ranger
 
 import (
 	"errors"
+	"fmt"
+	"github.com/gotd/contrib/http_range"
 	"io"
 	"net/http"
 )
@@ -15,6 +17,10 @@ type seqReader struct {
 }
 
 func (s *seqReader) Read(p []byte) (n int, err error) {
+	if s.offset >= s.ranger.Length() {
+		return 0, io.EOF
+	}
+
 	err = s.prepare()
 	if err != nil {
 		return 0, err
@@ -22,6 +28,7 @@ func (s *seqReader) Read(p []byte) (n int, err error) {
 
 	n, err = s.current.Read(p)
 	s.offset += int64(n)
+
 	if err == io.EOF { // we have read all the bytes from the current range, close it
 		s.reset()
 		if s.offset < s.ranger.Length() {
@@ -98,4 +105,73 @@ func NewSeqReader(client *http.Client, url string, ranger SizedRanger) io.ReadSe
 		offset: 0,
 		client: client,
 	}
+}
+
+type seqRangingClient struct {
+	ranger Ranger
+	client *http.Client
+}
+
+func (s seqRangingClient) RoundTrip(request *http.Request) (*http.Response, error) {
+	headReq, err := http.NewRequest("HEAD", request.URL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	headResp, err := s.client.Do(headReq)
+	if err != nil || headResp.ContentLength < 1 {
+		return nil, fmt.Errorf("unable to get content length via HEAD: %w", err)
+	}
+
+	parseRange, err := http_range.ParseRange(request.Header.Get("Range"), headResp.ContentLength)
+	if err != nil || len(parseRange) > 1 {
+		return nil, fmt.Errorf("unable to parse Range header correctly: %w", err)
+	}
+
+	seqr := NewSeqReader(s.client, request.URL.String(), NewSizedRanger(headResp.ContentLength, s.ranger))
+	fetchRange := http_range.Range{
+		Start:  0,
+		Length: headResp.ContentLength,
+	}
+	if parseRange != nil {
+		fetchRange = parseRange[0]
+	}
+	_, err = seqr.Seek(fetchRange.Start, io.SeekStart)
+	if err != nil {
+		return nil, fmt.Errorf("unable to seek correctly: %w", err)
+	}
+
+	return &http.Response{
+		Status:        http.StatusText(http.StatusOK),
+		StatusCode:    http.StatusOK,
+		Proto:         headResp.Proto,
+		ProtoMajor:    headResp.ProtoMajor,
+		ProtoMinor:    headResp.ProtoMinor,
+		Header:        headResp.Header,
+		Body:          readCloser{io.LimitReader(seqr, fetchRange.Length), seqr},
+		ContentLength: fetchRange.Length,
+		Close:         true,
+		Request:       request,
+		TLS:           headResp.TLS,
+	}, nil
+}
+
+func NewSeqRangingClient(ranger Ranger, client *http.Client) http.RoundTripper {
+	return &seqRangingClient{
+		ranger: ranger,
+		client: client,
+	}
+}
+
+type readCloser struct {
+	r io.Reader
+	c io.Closer
+}
+
+func (rc readCloser) Read(p []byte) (n int, err error) {
+	return rc.r.Read(p)
+}
+
+func (rc readCloser) Close() error {
+	return rc.c.Close()
 }

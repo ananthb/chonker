@@ -3,7 +3,6 @@ package ranger
 import (
 	"bytes"
 	"io"
-	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -71,7 +70,8 @@ func testClients() []*http.Client {
 
 func makeHTTPServer(t *testing.T, content []byte) *httptest.Server {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		time.Sleep(time.Duration(rand.Intn(1000)) * time.Microsecond)
+		//reqDump, _ := httputil.DumpRequest(request, false)
+		//t.Log(string(reqDump))
 		http.ServeContent(writer, request, "", time.Time{}, bytes.NewReader(content))
 	}))
 	return server
