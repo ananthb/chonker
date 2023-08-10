@@ -128,7 +128,7 @@ func (s seqRangingClient) RoundTrip(request *http.Request) (*http.Response, erro
 
 	contentRangeHeaderParts := strings.Split(lengthResp.Header.Get("Content-Range"), "/")
 	if len(contentRangeHeaderParts) < 2 {
-		return nil, errors.New("could not figure out content length")
+		return nil, errors.New("could not figure out content length from Content-Range header")
 	}
 
 	contentLength, err := strconv.ParseInt(contentRangeHeaderParts[1], 10, 64)
@@ -136,8 +136,8 @@ func (s seqRangingClient) RoundTrip(request *http.Request) (*http.Response, erro
 		return nil, fmt.Errorf("unable to get content length: %w", err)
 	}
 
-	parseRange, err := http_range.ParseRange(request.Header.Get("Range"), contentLength)
-	if err != nil || len(parseRange) > 1 {
+	parsedRange, err := http_range.ParseRange(request.Header.Get("Range"), contentLength)
+	if err != nil || len(parsedRange) > 1 {
 		return nil, fmt.Errorf("unable to parse Range header correctly: %w", err)
 	}
 
@@ -146,8 +146,8 @@ func (s seqRangingClient) RoundTrip(request *http.Request) (*http.Response, erro
 		Start:  0,
 		Length: contentLength,
 	}
-	if parseRange != nil {
-		fetchRange = parseRange[0]
+	if parsedRange != nil {
+		fetchRange = parsedRange[0]
 	}
 	_, err = seqr.Seek(fetchRange.Start, io.SeekStart)
 	if err != nil {
