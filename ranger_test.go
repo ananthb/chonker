@@ -39,3 +39,11 @@ func TestIndex(t *testing.T) {
 	assert.Equal(t, 4, ranger.Index(42))
 	assert.Equal(t, 9, ranger.Index(99))
 }
+
+func TestSizedRanger_RangeContaining(t *testing.T) {
+	r := NewRanger(10)
+	sr := NewSizedRanger(100, r)
+	assert.Equal(t, ByteRange{From: 0, To: 9}, sr.RangeContaining(0))
+	assert.Equal(t, ByteRange{From: 90, To: 99}, sr.RangeContaining(95))
+	assert.Equal(t, ByteRange{From: 0, To: 0}, sr.RangeContaining(150))
+}

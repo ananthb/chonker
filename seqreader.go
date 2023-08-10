@@ -44,7 +44,7 @@ func (s *seqReader) prepare() (err error) {
 	if s.current != nil {
 		return
 	}
-	br := s.ranger.At(s.offset).Floor(s.offset) // get the relevant byte range and start it from the current offset (needed for seek)
+	br := s.ranger.RangeContaining(s.offset).Floor(s.offset) // get the relevant byte range and start it from the current offset (needed for seek)
 	resp, err := s.makeRangeRequest(br)
 	if err == nil {
 		s.current = resp.Body

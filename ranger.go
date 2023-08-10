@@ -46,8 +46,13 @@ func (r SizedRanger) Length() int64 {
 	return r.length
 }
 
-func (r SizedRanger) At(offset int64) ByteRange {
-	return r.ranger.Ranges(r.length)[r.ranger.Index(offset)]
+func (r SizedRanger) RangeContaining(offset int64) (br ByteRange) {
+	index := r.ranger.Index(offset)
+	ranges := r.ranger.Ranges(r.length)
+	if index < len(ranges) {
+		br = ranges[index]
+	}
+	return
 }
 
 func NewSizedRanger(length int64, ranger Ranger) SizedRanger {
