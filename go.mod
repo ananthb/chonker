@@ -6,7 +6,7 @@ require (
 	github.com/dsnet/golib/memfile v1.0.0
 	github.com/gotd/contrib v0.19.0
 	github.com/sourcegraph/conc v0.3.0
-	github.com/stretchr/testify v1.8.3
+	github.com/stretchr/testify v1.8.4
 	golang.org/x/sync v0.3.0
 
 )
