@@ -155,8 +155,8 @@ func (s seqRangingClient) RoundTrip(request *http.Request) (*http.Response, erro
 	}
 
 	return &http.Response{
-		Status:        http.StatusText(http.StatusOK),
-		StatusCode:    http.StatusOK,
+		Status:        lengthResp.Status,
+		StatusCode:    lengthResp.StatusCode,
 		Proto:         lengthResp.Proto,
 		ProtoMajor:    lengthResp.ProtoMajor,
 		ProtoMinor:    lengthResp.ProtoMinor,
