@@ -126,33 +126,36 @@ func (s seqRangingClient) RoundTrip(request *http.Request) (*http.Response, erro
 		return nil, err
 	}
 
-	contentRangeHeaderParts := strings.Split(lengthResp.Header.Get("Content-Range"), "/")
-	if len(contentRangeHeaderParts) < 2 {
+	lengthRespRangeHeaderParts := strings.Split(lengthResp.Header.Get("Content-Range"), "/")
+	if len(lengthRespRangeHeaderParts) < 2 {
 		return nil, errors.New("could not figure out content length from Content-Range header")
 	}
 
-	contentLength, err := strconv.ParseInt(contentRangeHeaderParts[1], 10, 64)
+	totalContentLength, err := strconv.ParseInt(lengthRespRangeHeaderParts[1], 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get content length: %w", err)
 	}
 
-	parsedRange, err := http_range.ParseRange(request.Header.Get("Range"), contentLength)
+	parsedRange, err := http_range.ParseRange(request.Header.Get("Range"), totalContentLength)
 	if err != nil || len(parsedRange) > 1 {
-		return nil, fmt.Errorf("unable to parse Range header correctly: %w", err)
+		return nil, fmt.Errorf("unable to parse requested Range header correctly: %w", err)
 	}
 
-	seqr := NewSeqReader(s.client, request.URL.String(), NewSizedRanger(contentLength, s.ranger))
-	fetchRange := http_range.Range{
+	seqr := NewSeqReader(s.client, request.URL.String(), NewSizedRanger(totalContentLength, s.ranger))
+	rangeToFetch := http_range.Range{
 		Start:  0,
-		Length: contentLength,
+		Length: totalContentLength,
 	}
 	if parsedRange != nil {
-		fetchRange = parsedRange[0]
+		rangeToFetch = parsedRange[0]
 	}
-	_, err = seqr.Seek(fetchRange.Start, io.SeekStart)
+	_, err = seqr.Seek(rangeToFetch.Start, io.SeekStart)
 	if err != nil {
 		return nil, fmt.Errorf("unable to seek correctly: %w", err)
 	}
+
+	headers := lengthResp.Header.Clone()
+	headers.Set("Content-Range", rangeToFetch.ContentRange(totalContentLength))
 
 	return &http.Response{
 		Status:        lengthResp.Status,
@@ -160,9 +163,9 @@ func (s seqRangingClient) RoundTrip(request *http.Request) (*http.Response, erro
 		Proto:         lengthResp.Proto,
 		ProtoMajor:    lengthResp.ProtoMajor,
 		ProtoMinor:    lengthResp.ProtoMinor,
-		Header:        lengthResp.Header,
-		Body:          readCloser{io.LimitReader(seqr, fetchRange.Length), seqr},
-		ContentLength: fetchRange.Length,
+		Header:        headers,
+		Body:          readCloser{io.LimitReader(seqr, rangeToFetch.Length), seqr},
+		ContentLength: rangeToFetch.Length,
 		Close:         true,
 		Request:       request,
 		TLS:           lengthResp.TLS,
