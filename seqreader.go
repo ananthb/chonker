@@ -3,7 +3,6 @@ package ranger
 import (
 	"errors"
 	"fmt"
-	"github.com/gotd/contrib/http_range"
 	"io"
 	"net/http"
 	"strconv"
@@ -136,13 +135,13 @@ func (s seqRangingClient) RoundTrip(request *http.Request) (*http.Response, erro
 		return nil, fmt.Errorf("unable to get content length: %w", err)
 	}
 
-	parsedRange, err := http_range.ParseRange(request.Header.Get("Range"), totalContentLength)
+	parsedRange, err := ParseRange(request.Header.Get("Range"), totalContentLength)
 	if err != nil || len(parsedRange) > 1 {
 		return nil, fmt.Errorf("unable to parse requested Range header correctly: %w", err)
 	}
 
 	seqr := NewSeqReader(s.client, request.URL.String(), NewSizedRanger(totalContentLength, s.ranger))
-	rangeToFetch := http_range.Range{
+	rangeToFetch := Range{
 		Start:  0,
 		Length: totalContentLength,
 	}
