@@ -1,49 +1,70 @@
 package ranger
 
 import (
+	"bytes"
+	"io"
+	"math/rand"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestSimpleRanger(t *testing.T) {
-	ranger := NewRanger(10)
-	ranges := ranger.Ranges(100)
-	assert.Equal(t, 10, len(ranges))
-	assert.Equal(t, ByteRange{From: 0, To: 9}, ranges[0])
-	assert.Equal(t, ByteRange{From: 10, To: 19}, ranges[1])
-	assert.Equal(t, ByteRange{From: 20, To: 29}, ranges[2])
-	assert.Equal(t, ByteRange{From: 30, To: 39}, ranges[3])
-	assert.Equal(t, ByteRange{From: 40, To: 49}, ranges[4])
-	assert.Equal(t, ByteRange{From: 50, To: 59}, ranges[5])
-	assert.Equal(t, ByteRange{From: 60, To: 69}, ranges[6])
-	assert.Equal(t, ByteRange{From: 70, To: 79}, ranges[7])
-	assert.Equal(t, ByteRange{From: 80, To: 89}, ranges[8])
-	assert.Equal(t, ByteRange{From: 90, To: 99}, ranges[9])
+func TestRangingTransport(t *testing.T) {
+	content := makeData(100)
+	server := makeHTTPServer(t, content)
+
+	clients := []*http.Client{
+		http.DefaultClient, // all clients must behave the same as the default HTTP client
+		{Transport: NewRoundTripper(nil, 10, 1)},
+		{Transport: NewRoundTripper(nil, 1000, 10)},
+	}
+	testCases := []struct {
+		rangeHeader string
+		expected    []byte
+	}{
+		{expected: content},
+		{rangeHeader: "bytes=42-", expected: content[42:]},
+		{rangeHeader: "bytes=42-84", expected: content[42:85]},
+	}
+
+	for clientIndex, client := range clients {
+		for _, testCase := range testCases {
+			t.Run(
+				"Client["+strconv.Itoa(clientIndex)+"]:"+testCase.rangeHeader,
+				func(t *testing.T) {
+					req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+					assert.NoError(t, err)
+					if testCase.rangeHeader != "" {
+						req.Header.Set("Range", testCase.rangeHeader)
+					}
+					response, err := client.Do(req)
+					assert.NoError(t, err)
+					defer response.Body.Close()
+					servedContent, err := io.ReadAll(response.Body)
+					assert.NoError(t, err)
+					assert.Equal(t, testCase.expected, servedContent)
+				},
+			)
+		}
+	}
 }
 
-func TestOvershoot(t *testing.T) {
-	ranger := NewRanger(75)
-	ranges := ranger.Ranges(100)
-	assert.Equal(t, 2, len(ranges))
-	assert.Equal(t, ByteRange{From: 0, To: 74}, ranges[0])
-	assert.Equal(t, ByteRange{From: 75, To: 99}, ranges[1])
+func makeData(size int) []byte {
+	rnd := rand.New(rand.NewSource(42))
+	content := make([]byte, size)
+	rnd.Read(content)
+	return content
 }
 
-func TestIndex(t *testing.T) {
-	ranger := NewRanger(10)
-	assert.Equal(t, 0, ranger.Index(0))
-	assert.Equal(t, 0, ranger.Index(5))
-	assert.Equal(t, 0, ranger.Index(9))
-	assert.Equal(t, 1, ranger.Index(10))
-	assert.Equal(t, 4, ranger.Index(42))
-	assert.Equal(t, 9, ranger.Index(99))
-}
-
-func TestSizedRanger_RangeContaining(t *testing.T) {
-	r := NewRanger(10)
-	sr := NewSizedRanger(100, r)
-	assert.Equal(t, ByteRange{From: 0, To: 9}, sr.RangeContaining(0))
-	assert.Equal(t, ByteRange{From: 90, To: 99}, sr.RangeContaining(95))
-	assert.Equal(t, ByteRange{From: 0, To: 0}, sr.RangeContaining(150))
+func makeHTTPServer(t *testing.T, content []byte) *httptest.Server {
+	server := httptest.NewServer(
+		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			http.ServeContent(writer, request, "", time.Now(), bytes.NewReader(content))
+		}),
+	)
+	return server
 }
