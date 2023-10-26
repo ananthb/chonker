@@ -4,6 +4,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
 	"testing/iotest"
@@ -24,6 +25,13 @@ func TestSeqReader(t *testing.T) {
 func TestSeqHTTPClient(t *testing.T) {
 	content := makeData(100)
 	server := makeHTTPServer(t, content)
+
+	postServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		err := request.ParseForm()
+		assert.Equal(t, "world", request.Form.Get("hello"))
+		assert.NoError(t, err)
+		assert.NotEqual(t, request.Method, http.MethodGet)
+	}))
 
 	clients := []*http.Client{
 		http.DefaultClient, // all clients must behave the same as the default HTTP client
@@ -52,6 +60,9 @@ func TestSeqHTTPClient(t *testing.T) {
 				servedContent, err := io.ReadAll(response.Body)
 				assert.NoError(t, err)
 				assert.Equal(t, testCase.expected, servedContent)
+
+				_, err = client.PostForm(postServer.URL, map[string][]string{"hello": {"world"}})
+				assert.NoError(t, err)
 			})
 		}
 	}

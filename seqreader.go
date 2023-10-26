@@ -114,6 +114,11 @@ type seqRangingClient struct {
 }
 
 func (s seqRangingClient) RoundTrip(request *http.Request) (*http.Response, error) {
+	//if the request is not a GET request, we don't want to do anything special, just delegate to the default client
+	if request.Method != http.MethodGet {
+		return s.client.Do(request)
+	}
+
 	lengthReq, err := http.NewRequest("GET", request.URL.String(), nil)
 	if err != nil {
 		return nil, err
