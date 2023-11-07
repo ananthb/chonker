@@ -56,6 +56,9 @@ func (s *seqReader) makeRangeRequest(br ByteRange) (resp *http.Response, err err
 	if err == nil {
 		resp, err = s.client.Do(req)
 	}
+	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("unexpected status code %d", resp.StatusCode)
+	}
 	return
 }
 
