@@ -31,13 +31,6 @@ func (r Ranger) Ranges(length int64) []ByteRange {
 	return ranges
 }
 
-func min(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // Index returns the index of the chunk that contains the given offset.
 func (r Ranger) Index(i int64) int {
 	// we want a math.floor on the index / chunk size - this gives us the index of the chunk

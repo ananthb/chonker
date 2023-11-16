@@ -40,10 +40,3 @@ func (br ByteRange) Request(url string) (req *http.Request, err error) {
 	}
 	return
 }
-
-func max(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
