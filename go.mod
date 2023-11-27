@@ -3,7 +3,6 @@ module github.com/sudhirj/ranger
 go 1.21
 
 require (
-	github.com/ananthb/ringbuffer v1.0.0
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.4
 )

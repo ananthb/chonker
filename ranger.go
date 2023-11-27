@@ -4,17 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 
-	"github.com/ananthb/ringbuffer"
 	"github.com/sourcegraph/conc/stream"
 )
 
 // Do performs http.Request r using http.Client c and returns a http.Response.
 // The response body is fetched using HTTP Range requests.
-// Each sub-request fetches a chunk of chunkSize bytes.
-// Fetched chunks are written to a ring buffer of bufferNum chunks.
+// Each sub-request fetches a chunk of chunkSize bytes (minimum 1024 bytes).
+// Fetched chunks are written to a ring buffer of bufferNum chunks (minimum 5 chunks).
 // The buffer is filled asynchronously as the reader reads the response body.
 // If the request method is HEAD, the response is fetched in one go.
 func Do(
@@ -33,10 +33,10 @@ func Do(
 		return c.Do(r)
 	}
 	if chunkSize < 1 {
-		return nil, errors.New("chunk size must be greater than 0")
+		return nil, errors.New("chunk size must be non-zero")
 	}
 	if bufferNum < 1 {
-		return nil, errors.New("buffer number must be greater than 0")
+		return nil, errors.New("buffer number must be non-zero")
 	}
 
 	req := r.Clone(ctx)
@@ -78,15 +78,16 @@ func Do(
 
 	fetchCtx, cancelFetch := context.WithCancel(ctx)
 	chunks := Chunks(chunkSize, fetchRange.Start, fetchRange.Start+fetchRange.Length)
+	read, write := io.Pipe()
 	remoteFile := &remoteFileReader{
 		client:      c,
 		url:         r.URL,
 		chunks:      chunks,
 		cancelFetch: cancelFetch,
-		buf:         ringbuffer.New(int(bufferNum * chunkSize)),
+		data:        read,
 	}
 	fetchers := stream.New().WithMaxGoroutines(int(bufferNum))
-	go remoteFile.fillBuffer(fetchCtx, fetchers)
+	go remoteFile.fillBuffer(fetchCtx, fetchers, write)
 
 	headers := resp.Header.Clone()
 	cr, ok := fetchRange.ContentRange(contentLength)
@@ -125,9 +126,6 @@ func NewClient(chunkClient *http.Client, chunkSize, bufferNum int64) *http.Clien
 // If chunkClient is nil, http.DefaultClient is used.
 // If buffer size in bytes is greater than the size of the file, the file is fetched in one request.
 func NewRoundTripper(chunkClient *http.Client, chunkSize, bufferNum int64) http.RoundTripper {
-	if chunkClient == nil {
-		chunkClient = http.DefaultClient
-	}
 	return &rangingTripper{
 		chunkClient: chunkClient,
 		chunkSize:   chunkSize,

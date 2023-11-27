@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"sync/atomic"
 
-	"github.com/ananthb/ringbuffer"
 	"github.com/sourcegraph/conc/stream"
 )
 
@@ -30,60 +29,41 @@ type remoteFileReader struct {
 
 	cancelFetch context.CancelFunc
 	fetchDone   atomic.Bool
-	fetchErr    atomic.Pointer[error]
 
-	// Concurrent data buffer.
-	buf *ringbuffer.RingBuffer
+	data *io.PipeReader
 }
 
 func (r *remoteFileReader) Read(p []byte) (int, error) {
-	if err := r.fetchErr.Load(); err != nil {
-		r.fetchErr.Store(nil)
-		return 0, *err
+	if r.fetchDone.Load() {
+		return 0, io.EOF
 	}
-	if r.buf.IsEmpty() {
-		if r.fetchDone.Load() {
-			return 0, io.EOF
-		}
-		// Wait for the buffer to be filled
-		return 0, nil
-	}
-	n, err := r.buf.Read(p)
-	if err != nil {
-		if errors.Is(err, ringbuffer.ErrEmpty) {
-			return n, nil
-		}
-		return n, err
-	}
-	return n, nil
+	return r.data.Read(p)
 }
 
 func (r *remoteFileReader) Close() error {
 	r.cancelFetch()
-	if err := r.fetchErr.Load(); err != nil {
-		r.fetchErr.Store(nil)
-		return *err
-	}
 	return nil
 }
 
-func (r *remoteFileReader) fillBuffer(ctx context.Context, fetchers *stream.Stream) {
-	go func() {
-		<-ctx.Done()
-		r.fetchDone.Store(true)
-	}()
+func (r *remoteFileReader) fillBuffer(
+	ctx context.Context,
+	fetchers *stream.Stream,
+	w *io.PipeWriter,
+) {
+	defer r.fetchDone.Store(true)
+	defer w.Close()
 	defer r.cancelFetch()
 	defer fetchers.Wait()
+
 	for _, rn := range r.chunks {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.url.String(), nil)
 		if err != nil && !errors.Is(err, context.Canceled) {
-			r.fetchErr.Store(&err)
+			w.CloseWithError(err)
 			return
 		}
 		rangeHeader, ok := rn.Range()
 		if !ok {
-			err := fmt.Errorf("unable to generate Range header for %#v", rn)
-			r.fetchErr.Store(&err)
+			w.CloseWithError(fmt.Errorf("unable to generate Range header for %#v", rn))
 			return
 		}
 		req.Header.Set(headerNameRange, rangeHeader)
@@ -93,32 +73,23 @@ func (r *remoteFileReader) fillBuffer(ctx context.Context, fetchers *stream.Stre
 			return func() {
 				if err != nil {
 					if !errors.Is(err, context.Canceled) {
-						r.fetchErr.Store(&err)
+						w.CloseWithError(err)
 					}
 					r.cancelFetch()
 					return
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode != http.StatusPartialContent {
-					err := fmt.Errorf("%w fetching range %#v, got status %s",
-						ErrRangeUnsupported, rn, resp.Status)
-					r.fetchErr.Store(&err)
+					w.CloseWithError(fmt.Errorf("%w fetching range %#v, got status %s",
+						ErrRangeUnsupported, rn, resp.Status))
 					r.cancelFetch()
 					return
 				}
-				for {
-					n, err := io.Copy(r.buf, resp.Body)
-					if err == nil || errors.Is(err, context.Canceled) {
+				if _, err := io.Copy(w, resp.Body); err != nil {
+					if errors.Is(err, context.Canceled) {
 						return
 					}
-					if errors.Is(err, ringbuffer.ErrFull) {
-						continue
-					}
-					if n != resp.ContentLength {
-						err = io.ErrShortWrite
-					}
-					// err is non-nil and not ringbuffer.ErrFull or context.Canceled.
-					r.fetchErr.Store(&err)
+					w.CloseWithError(err)
 					r.cancelFetch()
 					return
 				}
