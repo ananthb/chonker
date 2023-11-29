@@ -1,10 +1,8 @@
 package ranger
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/textproto"
 	"strconv"
 	"strings"
@@ -51,20 +49,6 @@ func (c Chunk) ContentRange(size int64) (string, bool) {
 		return "", false
 	}
 	return fmt.Sprintf("%s%d-%d/%d", unit, c.Start, end, size), true
-}
-
-// Request returns a new http.Request with the Range header set to fetch the chunk.
-func (c Chunk) Request(ctx context.Context, url string) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	rn, ok := c.Range()
-	if !ok {
-		return nil, ErrInvalidRange
-	}
-	req.Header.Set("Range", rn)
-	return req, nil
 }
 
 // ParseRange parses a Range header string as per RFC 7233.

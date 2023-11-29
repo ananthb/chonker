@@ -11,11 +11,19 @@ import (
 	"github.com/sourcegraph/conc/stream"
 )
 
+var ErrInvalidArgument = errors.New(
+	"ranger: chunkSize and workers must be greater than zero",
+)
+
 // Request is a ranged http.Request.
 type Request struct {
 	*http.Request
 	chunkSize int64
 	workers   int64
+}
+
+func (r Request) isValid() bool {
+	return r.chunkSize > 0 && r.workers > 0
 }
 
 // NewRequestWithContext returns a new Request.
@@ -32,17 +40,15 @@ func NewRequestWithContext(
 	if err != nil {
 		return nil, err
 	}
-	if chunkSize < 1 {
-		return nil, errors.New("chunk size must be non-zero")
-	}
-	if workers < 1 {
-		return nil, errors.New("buffer number must be non-zero")
-	}
-	return &Request{
+	r := &Request{
 		Request:   req,
 		chunkSize: chunkSize,
 		workers:   workers,
-	}, nil
+	}
+	if !r.isValid() {
+		return nil, ErrInvalidArgument
+	}
+	return r, nil
 }
 
 // NewRequest returns a new Request.
@@ -59,6 +65,9 @@ func NewRequest(method, url string, body io.Reader, chunkSize, workers int64) (*
 func Do(c *http.Client, r *Request) (*http.Response, error) {
 	if r == nil || r.Request == nil {
 		return nil, errors.New("request cannot be nil")
+	}
+	if !r.isValid() {
+		return nil, ErrInvalidArgument
 	}
 
 	if c == nil {
@@ -114,14 +123,14 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 		headers.Set(headerNameContentRange, cr)
 		contentLength = chunks[0].Length
 	default:
-		return nil, errors.New("ranger does not support fetching multiple ranges")
+		return nil, errors.New("ranger: multiple ranges not supported")
 	}
 
 	read, write := io.Pipe()
 	remoteFile := &remoteFileReader{
 		PipeReader: read,
 		client:     c,
-		url:        r.URL,
+		request:    r,
 		chunks:     chunks,
 	}
 	fetchers := stream.New().WithMaxGoroutines(int(r.workers))
@@ -146,10 +155,14 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 
 // NewClient returns a new http.Client that uses a ranging http.RoundTripper.
 // Chunks are chunkSize bytes long. A maximum of workers chunks are fetched concurrently.
-func NewClient(chunkClient *http.Client, chunkSize, workers int64) *http.Client {
-	return &http.Client{
-		Transport: NewRoundTripper(chunkClient, chunkSize, workers),
+func NewClient(chunkClient *http.Client, chunkSize, workers int64) (*http.Client, error) {
+	transport, err := NewRoundTripper(chunkClient, chunkSize, workers)
+	if err != nil {
+		return nil, err
 	}
+	return &http.Client{
+		Transport: transport,
+	}, nil
 }
 
 type roundTripper func(*http.Request) (*http.Response, error)
@@ -161,19 +174,19 @@ func (r roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 // NewRoundTripper returns a new http.RoundTripper that fetches requests in chunks.
 // Chunks are chunkSize bytes long. A maximum of workers chunks are fetched concurrently.
 // If chunkClient is nil, http.DefaultClient is used.
-func NewRoundTripper(chunkClient *http.Client, chunkSize, workers int64) http.RoundTripper {
+func NewRoundTripper(
+	chunkClient *http.Client,
+	chunkSize, workers int64,
+) (http.RoundTripper, error) {
+	if chunkSize < 1 || workers < 1 {
+		return nil, ErrInvalidArgument
+	}
 	return roundTripper(func(r *http.Request) (*http.Response, error) {
-		req, err := NewRequestWithContext(
-			r.Context(),
-			r.Method,
-			r.URL.String(),
-			r.Body,
-			chunkSize,
-			workers,
-		)
-		if err != nil {
-			return nil, err
+		req := Request{
+			Request:   r,
+			chunkSize: chunkSize,
+			workers:   workers,
 		}
-		return Do(chunkClient, req)
-	})
+		return Do(chunkClient, &req)
+	}), nil
 }

@@ -1,7 +1,6 @@
 package ranger
 
 import (
-	"context"
 	"reflect"
 	"testing"
 
@@ -107,21 +106,6 @@ func TestChunk_ContentRange(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestChunk_Request(t *testing.T) {
-	c := Chunk{Start: 10, Length: 10}
-	req, err := c.Request(context.Background(), "http://example.com")
-	assert.NoError(t, err)
-	assert.Equal(t, "http://example.com", req.URL.String())
-	assert.Equal(t, "bytes=10-19", req.Header.Get("Range"))
-
-	_, err = c.Request(context.Background(), "ftp://invalid url")
-	assert.Error(t, err)
-
-	c = Chunk{Start: -1}
-	_, err = c.Request(context.Background(), "http://example.com")
-	assert.Error(t, err)
 }
 
 var parseRangeTests = []struct {

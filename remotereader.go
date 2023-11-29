@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 
 	"github.com/sourcegraph/conc/stream"
 )
@@ -24,9 +23,9 @@ type remoteFileReader struct {
 	*io.PipeReader
 
 	// Constants. Don't touch.
-	client *http.Client
-	url    *url.URL
-	chunks []Chunk
+	client  *http.Client
+	request *Request
+	chunks  []Chunk
 }
 
 func (r *remoteFileReader) fetchChunks(
@@ -34,25 +33,19 @@ func (r *remoteFileReader) fetchChunks(
 	fetchers *stream.Stream,
 	w *io.PipeWriter,
 ) {
-	ctx, cancelFetch := context.WithCancel(ctx)
-	defer cancelFetch()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	go func() {
 		<-ctx.Done()
 		w.Close()
 	}()
 	defer fetchers.Wait()
 
-	for _, rn := range r.chunks {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.url.String(), nil)
-		if err != nil {
-			if !errors.Is(err, context.Canceled) {
-				w.CloseWithError(err)
-			}
-			return
-		}
-		rangeHeader, ok := rn.Range()
+	for _, chunk := range r.chunks {
+		req := r.request.Clone(ctx)
+		rangeHeader, ok := chunk.Range()
 		if !ok {
-			w.CloseWithError(fmt.Errorf("unable to generate Range header for %#v", rn))
+			w.CloseWithError(fmt.Errorf("unable to generate Range header for %#v", chunk))
 			return
 		}
 		req.Header.Set(headerNameRange, rangeHeader)
@@ -64,23 +57,23 @@ func (r *remoteFileReader) fetchChunks(
 					if !errors.Is(err, context.Canceled) {
 						w.CloseWithError(err)
 					}
-					cancelFetch()
+					cancel()
 					return
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode != http.StatusPartialContent {
 					w.CloseWithError(fmt.Errorf("%w fetching range %#v, got status %s",
-						ErrRangeUnsupported, rn, resp.Status))
-					cancelFetch()
+						ErrRangeUnsupported, chunk, resp.Status))
+					cancel()
 					return
 				}
 				if _, err := io.Copy(w, resp.Body); err != nil {
-					if errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe) {
-						cancelFetch()
+					if !(errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe)) {
+						w.CloseWithError(err)
 						return
 					}
-					w.CloseWithError(err)
-					cancelFetch()
+					cancel()
+					return
 				}
 			}
 		})

@@ -93,7 +93,7 @@ func TestDo(t *testing.T) {
 		err         bool
 	}{
 		{
-			name:        "Start at 42",
+			name:        "start at 42",
 			rangeHeader: "bytes=42-",
 			request: Request{
 				chunkSize: 1024,
@@ -119,15 +119,10 @@ func TestDo(t *testing.T) {
 			},
 		},
 		{
-			name:        "error fetching multiple ranges",
-			rangeHeader: "bytes=100-200,300-400",
-			err:         true,
-		},
-		{
-			name: "1 byte chunk",
+			name: "8 byte chunk",
 			request: Request{
-				chunkSize: 1,
-				workers:   1,
+				chunkSize: 8,
+				workers:   128,
 			},
 			expected: expected{body: content, contentLength: int64(len(content))},
 		},
@@ -140,33 +135,21 @@ func TestDo(t *testing.T) {
 			expected: expected{body: content, contentLength: int64(len(content))},
 		},
 		{
-			name: "2KiB chunks",
+			name:    "1MiB chunks",
+			content: makeData(16 * 1024 * 1024), // 16MiB
 			request: Request{
-				chunkSize: 2048,
+				chunkSize: 1024 * 1024,
 				workers:   8,
 			},
 			expected: expected{body: content, contentLength: int64(len(content))},
 		},
 		{
-			name: "16MiB chunks",
-			request: Request{
-				chunkSize: 16 * 1024 * 1024,
-				workers:   100,
-			},
-			expected: expected{body: content, contentLength: int64(len(content))},
-		},
-		{
-			name: "single chunk buffer",
+			name: "single worker",
 			request: Request{
 				chunkSize: 1024,
 				workers:   1,
 			},
 			expected: expected{body: content, contentLength: int64(len(content))},
-		},
-		{
-			name:        "invalid range",
-			rangeHeader: "bytes=100-50",
-			err:         true,
 		},
 		{
 			name: "test timeout",
@@ -175,12 +158,30 @@ func TestDo(t *testing.T) {
 				workers:   1,
 			},
 			content: makeData(1024 * 1024), // 1MiB
-			timeout: 1 * time.Millisecond,
+			timeout: 100 * time.Millisecond,
+		},
+		{
+			name: "invalid request",
+			err:  true,
+		},
+		{
+			name:        "invalid range",
+			request:     Request{chunkSize: 1024, workers: 100},
+			rangeHeader: "bytes=100-50",
+			err:         true,
+		},
+		{
+			name:        "error fetching multiple ranges",
+			request:     Request{chunkSize: 1024, workers: 100},
+			rangeHeader: "bytes=100-200,300-400",
+			err:         true,
 		},
 	}
 
 	for _, testCase := range testCases {
+		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 			if testCase.content == nil {
 				testCase.content = content
 			}
@@ -226,21 +227,120 @@ func TestDo(t *testing.T) {
 	}
 }
 
+func TestDo_NilRequest(t *testing.T) {
+	resp, err := Do(nil, nil)
+	assert.Nil(t, resp)
+	assert.Error(t, err)
+}
+
+func TestDo_PreserveRequestAttributes(t *testing.T) {
+	content := makeData(512)
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodHead {
+				assert.Equal(t, http.MethodPut, r.Method)
+			}
+			assert.Equal(t, "test", r.Header.Get("X-Test"))
+			http.ServeContent(w, r, "", time.Now(), bytes.NewReader(content))
+		}),
+	)
+	defer server.Close()
+
+	req, err := NewRequest(http.MethodPut, server.URL, nil, 64, 8)
+	assert.NoError(t, err)
+	req.Header.Set("X-Test", "test")
+
+	resp, err := Do(nil, req)
+	assert.NoError(t, err)
+	defer resp.Body.Close()
+}
+
+func TestDo_HeadRequest(t *testing.T) {
+	content := makeData(1024 * 10)
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodHead, r.Method)
+			http.ServeContent(w, r, "", time.Now(), bytes.NewReader(content))
+		}),
+	)
+	defer server.Close()
+
+	req, err := NewRequest(http.MethodHead, server.URL, nil, 64, 8)
+	assert.NoError(t, err)
+
+	resp, err := Do(nil, req)
+	assert.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, int64(len(content)), resp.ContentLength)
+}
+
+func TestDo_NoAcceptRanges(t *testing.T) {
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),
+	)
+	defer server.Close()
+
+	req, err := NewRequest(http.MethodGet, server.URL, nil, 64, 8)
+	assert.NoError(t, err)
+
+	_, err = Do(nil, req)
+	assert.Error(t, err)
+}
+
+func TestDo_InvalidContentLength(t *testing.T) {
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Accept-Ranges", "bytes")
+			w.Header().Set("Content-Length", "invalid")
+		}),
+	)
+	defer server.Close()
+
+	req, err := NewRequest(http.MethodGet, server.URL, nil, 64, 8)
+	assert.NoError(t, err)
+
+	_, err = Do(nil, req)
+	assert.Error(t, err)
+}
+
+func TestDo_ChunkRequestNotSupported(t *testing.T) {
+	content := makeData(1024)
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Range") != "" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			http.ServeContent(w, r, "", time.Now(), bytes.NewReader(content))
+		}),
+	)
+	defer server.Close()
+
+	req, err := NewRequest(http.MethodGet, server.URL, nil, 64, 8)
+	assert.NoError(t, err)
+
+	resp, err := Do(nil, req)
+	assert.NoError(t, err)
+
+	defer resp.Body.Close()
+	assert.Equal(t, int64(len(content)), resp.ContentLength)
+	assert.Error(t, iotest.TestReader(resp.Body, content))
+}
+
 func TestNewClient(t *testing.T) {
 	content := makeData(1024 * 10)
 	server := makeHTTPServer(content)
 	defer server.Close()
 
-	client := NewClient(nil, 1024, 100)
-	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	_, err := NewClient(nil, 1024, 100)
 	assert.NoError(t, err)
 
-	resp, err := client.Do(req)
-	assert.NoError(t, err)
+	_, err = NewClient(nil, 0, 100)
+	assert.Error(t, err)
 
-	defer resp.Body.Close()
-
-	assert.NoError(t, iotest.TestReader(resp.Body, content))
+	_, err = NewClient(nil, 1024, 0)
+	assert.Error(t, err)
 }
 
 func TestNewRoundTripper(t *testing.T) {
@@ -248,7 +348,8 @@ func TestNewRoundTripper(t *testing.T) {
 	server := makeHTTPServer(content)
 	defer server.Close()
 
-	transport := NewRoundTripper(nil, 1024, 100)
+	transport, err := NewRoundTripper(nil, 1024, 100)
+	assert.NoError(t, err)
 
 	client := &http.Client{Transport: transport}
 	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
@@ -262,6 +363,27 @@ func TestNewRoundTripper(t *testing.T) {
 	assert.NoError(t, iotest.TestReader(resp.Body, content))
 }
 
+func BenchmarkDo(b *testing.B) {
+	content := makeData(1024) // 1KiB
+	server := makeHTTPServer(content)
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	assert.NoError(b, err)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		resp, err := Do(nil, &Request{
+			Request:   req,
+			chunkSize: 64,
+			workers:   8,
+		})
+		assert.NoError(b, err)
+		defer resp.Body.Close()
+		assert.NoError(b, iotest.TestReader(resp.Body, content))
+	}
+}
+
 func makeData(size int) []byte {
 	rnd := rand.New(rand.NewSource(42))
 	content := make([]byte, size)
@@ -271,8 +393,8 @@ func makeData(size int) []byte {
 
 func makeHTTPServer(content []byte) *httptest.Server {
 	server := httptest.NewServer(
-		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			http.ServeContent(writer, request, "", time.Now(), bytes.NewReader(content))
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.ServeContent(w, r, "", time.Now(), bytes.NewReader(content))
 		}),
 	)
 	return server
