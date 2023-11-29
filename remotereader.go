@@ -49,13 +49,14 @@ func (r *remoteFileReader) fillBuffer(
 		<-ctx.Done()
 		w.Close()
 	}()
-	defer w.Close()
 	defer fetchers.Wait()
 
 	for _, rn := range r.chunks {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.url.String(), nil)
-		if err != nil && !errors.Is(err, context.Canceled) {
-			w.CloseWithError(err)
+		if err != nil {
+			if !errors.Is(err, context.Canceled) {
+				w.CloseWithError(err)
+			}
 			return
 		}
 		rangeHeader, ok := rn.Range()
