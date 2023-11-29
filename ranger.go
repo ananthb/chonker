@@ -1,7 +1,6 @@
 package ranger
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -86,17 +85,15 @@ func Do(
 		return nil, fmt.Errorf("ranger does not support fetching multiple ranges")
 	}
 
-	fetchCtx, cancelFetch := context.WithCancel(ctx)
 	read, write := io.Pipe()
 	remoteFile := &remoteFileReader{
-		client:      c,
-		url:         r.URL,
-		chunks:      chunks,
-		cancelFetch: cancelFetch,
-		data:        read,
+		client: c,
+		url:    r.URL,
+		chunks: chunks,
+		data:   read,
 	}
 	fetchers := stream.New().WithMaxGoroutines(int(workers))
-	go remoteFile.fillBuffer(fetchCtx, fetchers, write)
+	go remoteFile.fillBuffer(ctx, fetchers, write)
 
 	rangeResponse := http.Response{
 		Status:        resp.Status,

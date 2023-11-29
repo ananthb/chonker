@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sync/atomic"
 
 	"github.com/sourcegraph/conc/stream"
 )
@@ -27,21 +26,15 @@ type remoteFileReader struct {
 	url    *url.URL
 	chunks []Chunk
 
-	cancelFetch context.CancelFunc
-	fetchDone   atomic.Bool
-
 	data *io.PipeReader
 }
 
 func (r *remoteFileReader) Read(p []byte) (int, error) {
-	if r.fetchDone.Load() {
-		return 0, io.EOF
-	}
 	return r.data.Read(p)
 }
 
 func (r *remoteFileReader) Close() error {
-	r.cancelFetch()
+	r.data.Close()
 	return nil
 }
 
@@ -50,9 +43,13 @@ func (r *remoteFileReader) fillBuffer(
 	fetchers *stream.Stream,
 	w *io.PipeWriter,
 ) {
-	defer r.fetchDone.Store(true)
+	ctx, cancelFetch := context.WithCancel(ctx)
+	defer cancelFetch()
+	go func() {
+		<-ctx.Done()
+		w.Close()
+	}()
 	defer w.Close()
-	defer r.cancelFetch()
 	defer fetchers.Wait()
 
 	for _, rn := range r.chunks {
@@ -75,23 +72,23 @@ func (r *remoteFileReader) fillBuffer(
 					if !errors.Is(err, context.Canceled) {
 						w.CloseWithError(err)
 					}
-					r.cancelFetch()
+					cancelFetch()
 					return
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode != http.StatusPartialContent {
 					w.CloseWithError(fmt.Errorf("%w fetching range %#v, got status %s",
 						ErrRangeUnsupported, rn, resp.Status))
-					r.cancelFetch()
+					cancelFetch()
 					return
 				}
 				if _, err := io.Copy(w, resp.Body); err != nil {
-					if errors.Is(err, context.Canceled) {
+					if errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe) {
+						cancelFetch()
 						return
 					}
 					w.CloseWithError(err)
-					r.cancelFetch()
-					return
+					cancelFetch()
 				}
 			}
 		})
