@@ -21,24 +21,15 @@ const (
 var ErrRangeUnsupported = errors.New("server does not support range requests")
 
 type remoteFileReader struct {
+	*io.PipeReader
+
 	// Constants. Don't touch.
 	client *http.Client
 	url    *url.URL
 	chunks []Chunk
-
-	data *io.PipeReader
 }
 
-func (r *remoteFileReader) Read(p []byte) (int, error) {
-	return r.data.Read(p)
-}
-
-func (r *remoteFileReader) Close() error {
-	r.data.Close()
-	return nil
-}
-
-func (r *remoteFileReader) fillBuffer(
+func (r *remoteFileReader) fetchChunks(
 	ctx context.Context,
 	fetchers *stream.Stream,
 	w *io.PipeWriter,

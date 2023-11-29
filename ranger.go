@@ -87,13 +87,13 @@ func Do(
 
 	read, write := io.Pipe()
 	remoteFile := &remoteFileReader{
-		client: c,
-		url:    r.URL,
-		chunks: chunks,
-		data:   read,
+		PipeReader: read,
+		client:     c,
+		url:        r.URL,
+		chunks:     chunks,
 	}
 	fetchers := stream.New().WithMaxGoroutines(int(workers))
-	go remoteFile.fillBuffer(ctx, fetchers, write)
+	go remoteFile.fetchChunks(ctx, fetchers, write)
 
 	rangeResponse := http.Response{
 		Status:        resp.Status,
