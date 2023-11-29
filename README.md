@@ -31,7 +31,7 @@ Ranger speeds up transfers to Amazon S3 & CloudFront using two methods.
 
 1. Download files in small chunks using [HTTP Range](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Range)
    requests.
-2. Download chunks asynchronously in parallel.
+2. Download chunks in parallel.
 
 This allows CDN services to cache and serve cached chunks, even if the entire
 file is bigger than the individual object cache limit.
