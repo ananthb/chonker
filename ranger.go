@@ -13,14 +13,14 @@ import (
 
 // Do performs http.Request r using http.Client c and returns a http.Response.
 // The response body is fetched using HTTP Range requests.
-// Each sub-request fetches a chunk of chunkSize bytes (minimum 1024 bytes).
-// Fetched chunks are written to a ring buffer of bufferNum chunks (minimum 5 chunks).
-// The buffer is filled asynchronously as the reader reads the response body.
+// Each sub-request fetches a chunk of chunkSize bytes.
+// Calls to Read() will return data piped sequentially, in-order, from fetched chunks.
+// A maximum of workers chunks are fetched concurrently.
 // If the request method is HEAD, the response is fetched in one go.
 func Do(
 	c *http.Client,
 	r *http.Request,
-	chunkSize, bufferNum int64,
+	chunkSize, workers int64,
 ) (*http.Response, error) {
 	ctx := r.Context()
 	if c == nil {
@@ -35,7 +35,7 @@ func Do(
 	if chunkSize < 1 {
 		return nil, errors.New("chunk size must be non-zero")
 	}
-	if bufferNum < 1 {
+	if workers < 1 {
 		return nil, errors.New("buffer number must be non-zero")
 	}
 
@@ -61,23 +61,32 @@ func Do(
 	}
 
 	requestedRange := r.Header.Get(headerNameRange)
-	parsedRange, err := ParseRange(requestedRange, contentLength)
-	if err != nil || len(parsedRange) > 1 {
-		err = fmt.Errorf(
-			"unable to parse requested Range header %s correctly: %w",
+	chunks, err := ParseRange(requestedRange, contentLength)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"error parsing requested range %s: %w",
 			requestedRange,
 			err,
 		)
-		return nil, err
 	}
 
-	fetchRange := Chunk{Length: contentLength}
-	if len(parsedRange) > 0 {
-		fetchRange = parsedRange[0]
+	headers := resp.Header.Clone()
+
+	switch len(chunks) {
+	case 0:
+		chunks = Chunks(chunkSize, 0, contentLength)
+	case 1:
+		cr, ok := chunks[0].ContentRange(contentLength)
+		if !ok {
+			return nil, errors.New("unable to generate Content-Range header")
+		}
+		headers.Set(headerNameContentRange, cr)
+		contentLength = chunks[0].Length
+	default:
+		return nil, fmt.Errorf("ranger does not support fetching multiple ranges")
 	}
 
 	fetchCtx, cancelFetch := context.WithCancel(ctx)
-	chunks := Chunks(chunkSize, fetchRange.Start, fetchRange.Start+fetchRange.Length)
 	read, write := io.Pipe()
 	remoteFile := &remoteFileReader{
 		client:      c,
@@ -86,15 +95,8 @@ func Do(
 		cancelFetch: cancelFetch,
 		data:        read,
 	}
-	fetchers := stream.New().WithMaxGoroutines(int(bufferNum))
+	fetchers := stream.New().WithMaxGoroutines(int(workers))
 	go remoteFile.fillBuffer(fetchCtx, fetchers, write)
-
-	headers := resp.Header.Clone()
-	cr, ok := fetchRange.ContentRange(contentLength)
-	if !ok {
-		return nil, errors.New("unable to generate Content-Range header")
-	}
-	headers.Set(headerNameContentRange, cr)
 
 	rangeResponse := http.Response{
 		Status:        resp.Status,
@@ -102,7 +104,7 @@ func Do(
 		Proto:         resp.Proto,
 		ProtoMajor:    resp.ProtoMajor,
 		ProtoMinor:    resp.ProtoMinor,
-		ContentLength: fetchRange.Length,
+		ContentLength: contentLength,
 		Header:        headers,
 		Body:          remoteFile,
 		Request:       r,
@@ -112,33 +114,30 @@ func Do(
 }
 
 // NewClient returns a new http.Client that uses a ranging http.RoundTripper.
-// chunkSize specifies the size of a chunk in bytes.
-// bufferNum specifies the number of chunks to buffer in memory.
-func NewClient(chunkClient *http.Client, chunkSize, bufferNum int64) *http.Client {
+// Chunks are chunkSize bytes long. A maximum of workers chunks are fetched concurrently.
+func NewClient(chunkClient *http.Client, chunkSize, workers int64) *http.Client {
 	return &http.Client{
-		Transport: NewRoundTripper(chunkClient, chunkSize, bufferNum),
+		Transport: NewRoundTripper(chunkClient, chunkSize, workers),
 	}
 }
 
 // NewRoundTripper returns a new http.RoundTripper that fetches requests in chunks.
-// chunkSize specifies the size of a chunk in bytes.
-// bufferNum specifies the number of chunks to buffer in memory.
+// Chunks are chunkSize bytes long. A maximum of workers chunks are fetched concurrently.
 // If chunkClient is nil, http.DefaultClient is used.
-// If buffer size in bytes is greater than the size of the file, the file is fetched in one request.
-func NewRoundTripper(chunkClient *http.Client, chunkSize, bufferNum int64) http.RoundTripper {
+func NewRoundTripper(chunkClient *http.Client, chunkSize, workers int64) http.RoundTripper {
 	return &rangingTripper{
 		chunkClient: chunkClient,
 		chunkSize:   chunkSize,
-		bufferNum:   bufferNum,
+		workers:     workers,
 	}
 }
 
 type rangingTripper struct {
 	chunkClient *http.Client
 	chunkSize   int64
-	bufferNum   int64
+	workers     int64
 }
 
 func (s *rangingTripper) RoundTrip(request *http.Request) (*http.Response, error) {
-	return Do(s.chunkClient, request, s.chunkSize, s.bufferNum)
+	return Do(s.chunkClient, request, s.chunkSize, s.workers)
 }
