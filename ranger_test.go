@@ -21,7 +21,7 @@ func TestNewRequestWithContext(t *testing.T) {
 	testCases := []struct {
 		name     string
 		chunk    int64
-		workers  int64
+		workers  int
 		expected expected
 	}{
 		{

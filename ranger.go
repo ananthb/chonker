@@ -19,7 +19,7 @@ var ErrInvalidArgument = errors.New(
 type Request struct {
 	*http.Request
 	chunkSize int64
-	workers   int64
+	workers   int
 }
 
 func (r Request) isValid() bool {
@@ -34,7 +34,7 @@ func NewRequestWithContext(
 	ctx context.Context,
 	method, url string,
 	body io.Reader,
-	chunkSize, workers int64,
+	chunkSize int64, workers int,
 ) (*Request, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
@@ -53,7 +53,12 @@ func NewRequestWithContext(
 
 // NewRequest returns a new Request.
 // See NewRequestWithContext for more information.
-func NewRequest(method, url string, body io.Reader, chunkSize, workers int64) (*Request, error) {
+func NewRequest(
+	method, url string,
+	body io.Reader,
+	chunkSize int64,
+	workers int,
+) (*Request, error) {
 	return NewRequestWithContext(context.Background(), method, url, body, chunkSize, workers)
 }
 
@@ -131,10 +136,9 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 		PipeReader: read,
 		client:     c,
 		request:    r,
-		chunks:     chunks,
 	}
 	fetchers := stream.New().WithMaxGoroutines(int(r.workers))
-	go remoteFile.fetchChunks(ctx, fetchers, write)
+	go remoteFile.fetchChunks(ctx, chunks, fetchers, write)
 
 	rangeResponse := http.Response{
 		Status:     probeResp.Status,
@@ -155,7 +159,7 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 
 // NewClient returns a new http.Client that uses a ranging http.RoundTripper.
 // Chunks are chunkSize bytes long. A maximum of workers chunks are fetched concurrently.
-func NewClient(chunkClient *http.Client, chunkSize, workers int64) (*http.Client, error) {
+func NewClient(chunkClient *http.Client, chunkSize int64, workers int) (*http.Client, error) {
 	transport, err := NewRoundTripper(chunkClient, chunkSize, workers)
 	if err != nil {
 		return nil, err
@@ -176,7 +180,7 @@ func (r roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 // If chunkClient is nil, http.DefaultClient is used.
 func NewRoundTripper(
 	chunkClient *http.Client,
-	chunkSize, workers int64,
+	chunkSize int64, workers int,
 ) (http.RoundTripper, error) {
 	if chunkSize < 1 || workers < 1 {
 		return nil, ErrInvalidArgument

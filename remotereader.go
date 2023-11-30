@@ -22,14 +22,13 @@ var ErrRangeUnsupported = errors.New("server does not support range requests")
 type remoteFileReader struct {
 	*io.PipeReader
 
-	// Constants. Don't touch.
 	client  *http.Client
 	request *Request
-	chunks  []Chunk
 }
 
 func (r *remoteFileReader) fetchChunks(
 	ctx context.Context,
+	chunks []Chunk,
 	fetchers *stream.Stream,
 	w *io.PipeWriter,
 ) {
@@ -41,7 +40,7 @@ func (r *remoteFileReader) fetchChunks(
 	}()
 	defer fetchers.Wait()
 
-	for _, chunk := range r.chunks {
+	for _, chunk := range chunks {
 		req := r.request.Clone(ctx)
 		rangeHeader, ok := chunk.Range()
 		if !ok {
