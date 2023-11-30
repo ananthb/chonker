@@ -62,8 +62,8 @@ func (r *remoteFileReader) fetchChunks(
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode != http.StatusPartialContent {
-					w.CloseWithError(fmt.Errorf("%w fetching range %#v, got status %s",
-						ErrRangeUnsupported, chunk, resp.Status))
+					w.CloseWithError(fmt.Errorf("%w fetching range, got status %s",
+						ErrRangeUnsupported, resp.Status))
 					cancel()
 					return
 				}
