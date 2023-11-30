@@ -1,3 +1,7 @@
+// Copyright 2009 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package ranger
 
 import (
@@ -53,6 +57,7 @@ func (c Chunk) ContentRange(size int64) (string, bool) {
 
 // ParseRange parses a Range header string as per RFC 7233.
 // ErrNoOverlap is returned if none of the ranges fit inside content size.
+// See https://github.com/golang/go/blob/b4fa5b163df118b35a836bbe5706ac268b4cc14b/src/net/http/fs.go#L956
 func ParseRange(s string, size int64) ([]Chunk, error) {
 	if s == "" {
 		return nil, nil // header not present
