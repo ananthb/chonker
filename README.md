@@ -2,7 +2,7 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/sudhirj/ranger.svg)](https://pkg.go.dev/github.com/sudhirj/ranger)
 
-*Download large files in parallel chunks in Go.*
+*Download large files as parallel chunks using HTTP Range requests in Go.*
 
 [![Go](https://github.com/sudhirj/ranger/actions/workflows/go.yml/badge.svg)](https://github.com/sudhirj/ranger/actions/workflows/go.yml)
 
