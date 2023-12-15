@@ -1,4 +1,4 @@
-package ranger
+package chonker
 
 import (
 	"context"
@@ -11,9 +11,7 @@ import (
 	"github.com/sourcegraph/conc/stream"
 )
 
-var ErrInvalidArgument = errors.New(
-	"ranger: chunkSize and workers must be greater than zero",
-)
+var ErrInvalidArgument = errors.New("chonker: chunkSize and workers must be greater than zero")
 
 // Request is a ranged http.Request.
 type Request struct {

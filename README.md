@@ -1,12 +1,14 @@
-# RANGER
+# Chonker
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/sudhirj/ranger.svg)](https://pkg.go.dev/github.com/sudhirj/ranger)
+[![Chonker](chonker.jpg)](https://www.freepik.com/free-vector/hand-drawn-fat-cat-cartoon-illustration_58564188.htm)
 
-*Download large files in parallel chunks in Go.*
+[![Go Reference](https://pkg.go.dev/badge/github.com/ananthb/chonker.svg)](https://pkg.go.dev/github.com/ananthb/chonker)
 
-[![Go](https://github.com/sudhirj/ranger/actions/workflows/go.yml/badge.svg)](https://github.com/sudhirj/ranger/actions/workflows/go.yml)
+*Download large files as parallel chunks using HTTP Range Requests in Go.*
 
-Ranger works on Go 1.19, oldstable, and stable releases.
+[![Go](https://github.com/ananthb/chonker/actions/workflows/go.yml/badge.svg)](https://github.com/ananthb/chonker/actions/workflows/go.yml)
+
+Chonker works on Go 1.19, oldstable, and stable releases.
 
 ## Why?
 
@@ -25,9 +27,9 @@ support an almost unlimited number of connections between you and them.
 If you are downloading a large file from S3, its almost always better
 to download the file in chunks, using parallel connections.
 
-## What does Ranger do?
+## What does Chonker do?
 
-Ranger speeds up transfers to Amazon S3 & CloudFront using two methods.
+Chonker speeds up transfers to Amazon S3 & CloudFront using two methods.
 
 1. Download files in small chunks using [HTTP Range](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Range)
    requests.
@@ -40,14 +42,23 @@ See the [S3 Developer Guide](https://docs.aws.amazon.com/whitepapers/latest/s3-o
 and the [CloudFront Developer Guide](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/RangeGETs.html)
 for more information on cache sizes and parallel GETs.
 
-## Use Ranger
+## Use Chonker
 
-Use Ranger as an `io.ReadCloser`, an `http.Transport` that performs ranged
+Use Chonker as an `io.ReadCloser`, an `http.Transport` that performs ranged
 requests, or an `http.Client` that uses the afore-mentioned transport.
 
-This means that Ranger integrates well on both sides.
+Chonker integrates well with other Go download libraries.
 [Grab](https://github.com/cavaliergopher/grab) and other download managers
 can use a ranging client via the standard `http.Client` interface.
 While the ranging `http.Client` can wrap around other HTTP Clients that could
 provide automatic retries or better logging. See
 [Heimdall](https://github.com/gojek/heimdall) or [go-retryablehttp](https://github.com/hashicorp/go-retryablehttp).
+
+## License
+
+Chonker is a fork of [Ranger](https://github.com/sudhirj/ranger) and is available
+under the terms of the MIT license.
+
+The Chonker cat illustration is from [Freepik](https://www.freepik.com/free-vector/hand-drawn-fat-cat-cartoon-illustration_58564188.htm)
+
+See [LICENSE](LICENSE) for the full license text.

@@ -1,4 +1,4 @@
-module github.com/sudhirj/ranger
+module github.com/ananthb/chonker
 
 go 1.21
 
