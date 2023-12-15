@@ -378,16 +378,6 @@ func FuzzParseContentRange(f *testing.F) {
 	})
 }
 
-func TestIndex(t *testing.T) {
-	const chunkSize = 10
-	assert.Equal(t, int64(0), Index(chunkSize, 0))
-	assert.Equal(t, int64(0), Index(chunkSize, 5))
-	assert.Equal(t, int64(0), Index(chunkSize, 9))
-	assert.Equal(t, int64(1), Index(chunkSize, 10))
-	assert.Equal(t, int64(4), Index(chunkSize, 42))
-	assert.Equal(t, int64(9), Index(chunkSize, 99))
-}
-
 func TestChunks(t *testing.T) {
 	tests := []struct {
 		name      string

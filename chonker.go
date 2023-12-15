@@ -60,11 +60,12 @@ func NewRequest(
 	return NewRequestWithContext(context.Background(), method, url, body, chunkSize, workers)
 }
 
-// Do performs Request r using http.Client c and returns a http.Response.
-// If c is nil, http.DefaultClient is used.
-// The returned Response.Body is a ReadCloser that reads from the remote file in chunks.
-// Chunks are fetched parallelly and are written to the ReadCloser in order.
-// If r.Method is HEAD, the response is fetched without ranging, in one request.
+// Do sends an HTTP request and returns an HTTP response, following policy (such as redirects,
+// cookies, auth) as configured on the client.
+// It is a wrapper around http.Client.Do that adds support for ranged requests.
+// A ranged request is a request that is fetched in chunks using several HTTP requests.
+// Chunks are chunkSize bytes long. A maximum of workers chunks are fetched concurrently.
+// HTTP HEAD requests are not fetched in chunks.
 func Do(c *http.Client, r *Request) (*http.Response, error) {
 	if r == nil || r.Request == nil {
 		return nil, errors.New("request cannot be nil")
@@ -72,7 +73,6 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 	if !r.isValid() {
 		return nil, ErrInvalidArgument
 	}
-
 	if c == nil {
 		c = http.DefaultClient
 	}
@@ -155,10 +155,10 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 	return &rangeResponse, nil
 }
 
-// NewClient returns a new http.Client that uses a ranging http.RoundTripper.
-// Chunks are chunkSize bytes long. A maximum of workers chunks are fetched concurrently.
-func NewClient(chunkClient *http.Client, chunkSize int64, workers int) (*http.Client, error) {
-	transport, err := NewRoundTripper(chunkClient, chunkSize, workers)
+// NewClient returns a new http.Client configured with a http.RoundTripper transport
+// that fetches requests in chunks.
+func NewClient(c *http.Client, chunkSize int64, workers int) (*http.Client, error) {
+	transport, err := NewRoundTripper(c, chunkSize, workers)
 	if err != nil {
 		return nil, err
 	}
@@ -174,12 +174,7 @@ func (r roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 // NewRoundTripper returns a new http.RoundTripper that fetches requests in chunks.
-// Chunks are chunkSize bytes long. A maximum of workers chunks are fetched concurrently.
-// If chunkClient is nil, http.DefaultClient is used.
-func NewRoundTripper(
-	chunkClient *http.Client,
-	chunkSize int64, workers int,
-) (http.RoundTripper, error) {
+func NewRoundTripper(c *http.Client, chunkSize int64, workers int) (http.RoundTripper, error) {
 	if chunkSize < 1 || workers < 1 {
 		return nil, ErrInvalidArgument
 	}
@@ -189,6 +184,6 @@ func NewRoundTripper(
 			chunkSize: chunkSize,
 			workers:   workers,
 		}
-		return Do(chunkClient, &req)
+		return Do(c, &req)
 	}), nil
 }

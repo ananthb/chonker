@@ -174,15 +174,15 @@ func ParseContentRange(s string) (*Chunk, int64, error) {
 	return c, size, nil
 }
 
-// Index returns the index of the chunk containing the given offset.
-func Index(chunkSize, offset int64) int64 {
+// index returns the index of the chunk containing the given offset.
+func index(chunkSize, offset int64) int64 {
 	return offset / chunkSize
 }
 
 // Chunks divides the range [offset, length) into chunks of size chunkSize.
 func Chunks(chunkSize, offset, length int64) []Chunk {
 	ranges := make([]Chunk, 0)
-	for i := Index(chunkSize, offset) * chunkSize; i < length; i += chunkSize {
+	for i := index(chunkSize, offset) * chunkSize; i < length; i += chunkSize {
 		c := Chunk{
 			Start:  i,
 			Length: min(chunkSize, length-i),
