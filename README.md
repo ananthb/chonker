@@ -50,21 +50,22 @@ for more information on cache sizes and parallel GETs.
 
 ## Use Chonker
 
-Use Chonker as an `io.ReadCloser`, an `http.Transport` that performs ranged
-requests, or an `http.Client` that uses the afore-mentioned transport.
+Use `chonker.Do` to fetch a response for a request, or create a "chonky" `http.Transport`
+that fetches requests using HTTP Range sub-requests.
 
-Chonker integrates well with other Go download libraries.
+Chonker integrates well with Go download libraries.
 [Grab](https://github.com/cavaliergopher/grab) and other download managers
-can use a ranging client via the standard `http.Client` interface.
-While the ranging `http.Client` can wrap around other HTTP Clients that could
-provide automatic retries or better logging. See
-[Heimdall](https://github.com/gojek/heimdall) or [go-retryablehttp](https://github.com/hashicorp/go-retryablehttp).
+can use a `http.Client` with a "chonky" `http.Transport`.
+In turn, Chonker functions accept HTTP clients that could provide automatic retries
+or detailed logs. See
+[Heimdall](https://github.com/gojek/heimdall) or [go-retryablehttp](https://github.com/hashicorp/go-retryablehttp)
+for more.
 
 ## License
 
+The Chonker cat illustration is from [Freepik](https://www.freepik.com/free-vector/hand-drawn-fat-cat-cartoon-illustration_58564188.htm)
+
 Chonker is a fork of [Ranger](https://github.com/sudhirj/ranger) and is available
 under the terms of the MIT license.
-
-The Chonker cat illustration is from [Freepik](https://www.freepik.com/free-vector/hand-drawn-fat-cat-cartoon-illustration_58564188.htm)
 
 See [LICENSE](LICENSE) for the full license text.

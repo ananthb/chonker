@@ -1,3 +1,12 @@
+// Package chonker implements automatic ranged HTTP requests.
+//
+// A ranged request is a request that is fetched in chunks using several HTTP requests.
+// Chunks are fetched in separate goroutines by sending HTTP Range
+// requests to the server.
+// Chunks are then concatenated and returned as a single io.Reader.
+// Chunks are chunkSize bytes long.
+// A maximum of workers chunks are fetched concurrently.
+// If the server does not support range requests, the request fails.
 package chonker
 
 import (
@@ -11,7 +20,12 @@ import (
 	"github.com/sourcegraph/conc/stream"
 )
 
-var ErrInvalidArgument = errors.New("chonker: chunkSize and workers must be greater than zero")
+var (
+	ErrInvalidArgument = errors.New(
+		"chonker: chunkSize and workers must be greater than zero",
+	)
+	ErrMultipleRangesUnsupported = errors.New("chonker: multiple ranges not supported")
+)
 
 // Request is a ranged http.Request.
 type Request struct {
@@ -68,7 +82,7 @@ func NewRequest(
 // HTTP HEAD requests are not fetched in chunks.
 func Do(c *http.Client, r *Request) (*http.Response, error) {
 	if r == nil || r.Request == nil {
-		return nil, errors.New("request cannot be nil")
+		return nil, errors.New("chonker: request cannot be nil")
 	}
 	if !r.isValid() {
 		return nil, ErrInvalidArgument
@@ -97,7 +111,7 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 	contentLength, err := strconv.ParseInt(probeResp.Header.Get(headerNameContentLength), 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"unable to parse Content-Length header %s: %w",
+			"chonker: unable to parse Content-Length header %s: %w",
 			probeResp.Header.Get(headerNameContentLength),
 			err,
 		)
@@ -107,7 +121,7 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 	chunks, err := ParseRange(requestedRange, contentLength)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"error parsing requested range %s: %w",
+			"chonker: error parsing requested range %s: %w",
 			requestedRange,
 			err,
 		)
@@ -121,12 +135,12 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 	case 1:
 		cr, ok := chunks[0].ContentRange(contentLength)
 		if !ok {
-			return nil, errors.New("unable to generate Content-Range header")
+			return nil, errors.New("chonker: unable to generate Content-Range header")
 		}
 		headers.Set(headerNameContentRange, cr)
 		contentLength = chunks[0].Length
 	default:
-		return nil, errors.New("ranger: multiple ranges not supported")
+		return nil, ErrMultipleRangesUnsupported
 	}
 
 	read, write := io.Pipe()

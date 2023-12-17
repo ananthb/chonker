@@ -17,7 +17,7 @@ const (
 	headerNameRange         = "Range"
 )
 
-var ErrRangeUnsupported = errors.New("server does not support range requests")
+var ErrRangeUnsupported = errors.New("chonker: server does not support range requests")
 
 type remoteFileReader struct {
 	*io.PipeReader
@@ -30,13 +30,13 @@ func (r *remoteFileReader) fetchChunks(
 	ctx context.Context,
 	chunks []Chunk,
 	fetchers *stream.Stream,
-	w *io.PipeWriter,
+	writer *io.PipeWriter,
 ) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {
 		<-ctx.Done()
-		w.Close()
+		writer.Close()
 	}()
 	defer fetchers.Wait()
 
@@ -44,7 +44,9 @@ func (r *remoteFileReader) fetchChunks(
 		req := r.request.Clone(ctx)
 		rangeHeader, ok := chunk.Range()
 		if !ok {
-			w.CloseWithError(fmt.Errorf("unable to generate Range header for %#v", chunk))
+			writer.CloseWithError(
+				fmt.Errorf("chonker: unable to generate Range header for %#v", chunk),
+			)
 			return
 		}
 		req.Header.Set(headerNameRange, rangeHeader)
@@ -54,21 +56,21 @@ func (r *remoteFileReader) fetchChunks(
 			return func() {
 				if err != nil {
 					if !errors.Is(err, context.Canceled) {
-						w.CloseWithError(err)
+						writer.CloseWithError(err)
 					}
 					cancel()
 					return
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode != http.StatusPartialContent {
-					w.CloseWithError(fmt.Errorf("%w fetching range %s, got status %s",
+					writer.CloseWithError(fmt.Errorf("%w fetching range %s, got status %s",
 						ErrRangeUnsupported, rangeHeader, resp.Status))
 					cancel()
 					return
 				}
-				if _, err := io.Copy(w, resp.Body); err != nil {
+				if _, err := io.Copy(writer, resp.Body); err != nil {
 					if !(errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe)) {
-						w.CloseWithError(err)
+						writer.CloseWithError(err)
 						return
 					}
 					cancel()

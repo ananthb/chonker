@@ -15,13 +15,13 @@ import (
 var (
 	// ErrRangeNoOverlap is returned by ParseRange if first-byte-pos of
 	// all of the byte-range-spec values is greater than the content size.
-	ErrRangeNoOverlap = errors.New("ranges failed to overlap")
+	ErrRangeNoOverlap = errors.New("chonker: ranges failed to overlap")
 
 	// ErrInvalidRange is returned by ParseRange on invalid input.
-	ErrInvalidRange = errors.New("invalid range")
+	ErrInvalidRange = errors.New("chonker: invalid range")
 
 	// ErrUnsatisfiedRange is returned by ParseContentRange if the range is not satisfied.
-	ErrUnsatisfiedRange = errors.New("unsatisfied range")
+	ErrUnsatisfiedRange = errors.New("chonker: unsatisfied range")
 )
 
 // Chunk represents a byte range.
