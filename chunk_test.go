@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestChunk_Range(t *testing.T) {
+func TestChunk_RangeHeader(t *testing.T) {
 	tests := []struct {
 		name   string
 		c      Chunk
@@ -46,7 +46,7 @@ func TestChunk_Range(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := tt.c.Range()
+			got, ok := tt.c.RangeHeader()
 			if tt.wantOk {
 				assert.True(t, ok)
 				assert.Equal(t, tt.want, got)
@@ -57,7 +57,7 @@ func TestChunk_Range(t *testing.T) {
 	}
 }
 
-func TestChunk_ContentRange(t *testing.T) {
+func TestChunk_ContentRangeHeader(t *testing.T) {
 	tests := []struct {
 		name   string
 		c      Chunk
@@ -74,10 +74,11 @@ func TestChunk_ContentRange(t *testing.T) {
 			c:    Chunk{Start: 10},
 		},
 		{
-			name: "unsatisfied range",
-			c:    Chunk{},
-			size: 100,
-			want: "bytes */100",
+			name:   "unsatisfied range",
+			c:      Chunk{},
+			size:   100,
+			want:   "bytes */100",
+			wantOk: true,
 		},
 		{
 			name:   "full",
@@ -97,7 +98,7 @@ func TestChunk_ContentRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := tt.c.ContentRange(tt.size)
+			got, ok := tt.c.ContentRangeHeader(tt.size)
 			if tt.wantOk {
 				assert.True(t, ok)
 				assert.Equal(t, tt.want, got)
@@ -116,7 +117,8 @@ var parseRangeTests = []struct {
 	wantErr bool
 }{
 	{
-		name: "blank",
+		name:    "empty range",
+		wantErr: true,
 	},
 	{
 		name:    "invalid",

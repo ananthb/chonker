@@ -30,9 +30,12 @@ type Chunk struct {
 	Length int64
 }
 
-// Range returns a Range header value.
-// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Range.
-func (c Chunk) Range() (string, bool) {
+// RangeHeader returns a RangeHeader header value.
+// For more information on the Range header, see the MDN article on the
+// [Range header].
+//
+// [Range header]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Range
+func (c Chunk) RangeHeader() (string, bool) {
 	end := c.Start + c.Length - 1
 	if end < 0 || end < c.Start {
 		return "", false
@@ -40,13 +43,18 @@ func (c Chunk) Range() (string, bool) {
 	return fmt.Sprintf("bytes=%d-%d", c.Start, end), true
 }
 
-// ContentRange returns a Content-Range header value.
-// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range.
-func (c Chunk) ContentRange(size int64) (string, bool) {
+// ContentRangeHeader returns a Content-Range header value.
+// Size is the total size of the content.
+// Calling this method on a zero-value Chunk will return an unsatisfied range.
+// For more information on the Content-Range header, see the MDN article on
+// the [Content-Range header].
+//
+// [Content-Range header]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Range
+func (c Chunk) ContentRangeHeader(size int64) (string, bool) {
 	const unit = "bytes "
-	if c.Start == 0 && c.Length == 0 && size != 0 {
-		// Unsatisfied range
-		return fmt.Sprintf("%s*/%d", unit, size), false
+	// We only have a size, so return an unsatisfied range.
+	if c.Start <= 0 && c.Length <= 0 && size != 0 {
+		return fmt.Sprintf("%s*/%d", unit, size), true
 	}
 	end := c.Start + c.Length - 1
 	if c.Start < 0 || c.Length < 0 || c.Length > size || end < c.Start {
@@ -55,13 +63,14 @@ func (c Chunk) ContentRange(size int64) (string, bool) {
 	return fmt.Sprintf("%s%d-%d/%d", unit, c.Start, end, size), true
 }
 
-// ParseRange parses a Range header string as per RFC 7233.
+// ParseRange parses a Range header string as per [RFC 7233].
 // ErrNoOverlap is returned if none of the ranges fit inside content size.
-// See https://github.com/golang/go/blob/b4fa5b163df118b35a836bbe5706ac268b4cc14b/src/net/http/fs.go#L956
+// This function is a copy of the [parseRange] function from the Go standard library
+// net/http/fs.go with minor modifications.
+//
+// [RFC 7233]: https://tools.ietf.org/html/rfc7233#section-3.1
+// [parseRange]: https://github.com/golang/go/blob/b4fa5b163df118b35a836bbe5706ac268b4cc14b/src/net/http/fs.go#L956
 func ParseRange(s string, size int64) ([]Chunk, error) {
-	if s == "" {
-		return nil, nil // header not present
-	}
 	const b = "bytes="
 	if !strings.HasPrefix(s, b) {
 		return nil, ErrInvalidRange
@@ -133,8 +142,10 @@ func ParseRange(s string, size int64) ([]Chunk, error) {
 	return chunks, nil
 }
 
-// ParseContentRange parses a Content-Range header string as per RFC 7233.
+// ParseContentRange parses a Content-Range header string as per [RFC 7233].
 // ErrUnsatisfiedRange is returned if the range is not satisfied.
+//
+// [RFC 7233]: https://tools.ietf.org/html/rfc7233#section-4.2
 func ParseContentRange(s string) (*Chunk, int64, error) {
 	const bs = "bytes "
 	if !strings.HasPrefix(s, bs) {

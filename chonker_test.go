@@ -3,6 +3,7 @@ package chonker
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -185,15 +186,17 @@ func TestDo(t *testing.T) {
 			if testCase.content == nil {
 				testCase.content = content
 			}
-			server := makeHTTPServer(content)
+			server := makeHttptestServer(content)
 			defer server.Close()
 
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := context.Background()
+			var cancel context.CancelFunc
 			if testCase.timeout > 0 {
 				ctx, cancel = context.WithTimeout(ctx, testCase.timeout)
-				defer cancel()
+			} else {
+				ctx, cancel = context.WithCancel(ctx)
 			}
+			defer cancel()
 
 			req, err := http.NewRequestWithContext(
 				ctx,
@@ -209,7 +212,10 @@ func TestDo(t *testing.T) {
 			testCase.request.Request = req
 
 			resp, err := Do(nil, &testCase.request)
-			if testCase.timeout == 0 {
+			if testCase.timeout > 0 {
+				<-ctx.Done()
+				assert.NoError(t, err)
+			} else {
 				if testCase.err {
 					assert.Error(t, err)
 				} else {
@@ -219,12 +225,14 @@ func TestDo(t *testing.T) {
 					assert.Equal(t, testCase.expected.contentRangeHeader, resp.Header.Get("Content-Range"))
 					assert.NoError(t, iotest.TestReader(resp.Body, testCase.expected.body))
 				}
-			} else {
-				<-ctx.Done()
-				assert.NoError(t, err)
 			}
 		})
 	}
+}
+
+func TestDo_InvalidRequest(t *testing.T) {
+	_, err := NewRequest(http.MethodGet, "http://user:abc{DEf1=ghi@example.com", nil, 64, 8)
+	assert.Error(t, err)
 }
 
 func TestDo_NilRequest(t *testing.T) {
@@ -292,7 +300,7 @@ func TestDo_InvalidContentLength(t *testing.T) {
 	server := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Accept-Ranges", "bytes")
-			w.Header().Set("Content-Length", "invalid")
+			w.Header().Set("Content-Length", "not a number")
 		}),
 	)
 	defer server.Close()
@@ -330,7 +338,7 @@ func TestDo_ChunkRequestNotSupported(t *testing.T) {
 
 func TestNewClient(t *testing.T) {
 	content := makeData(1024 * 10)
-	server := makeHTTPServer(content)
+	server := makeHttptestServer(content)
 	defer server.Close()
 
 	_, err := NewClient(nil, 1024, 100)
@@ -345,7 +353,7 @@ func TestNewClient(t *testing.T) {
 
 func TestNewRoundTripper(t *testing.T) {
 	content := makeData(1024 * 10)
-	server := makeHTTPServer(content)
+	server := makeHttptestServer(content)
 	defer server.Close()
 
 	transport, err := NewRoundTripper(nil, 1024, 100)
@@ -365,7 +373,7 @@ func TestNewRoundTripper(t *testing.T) {
 
 func BenchmarkDo(b *testing.B) {
 	content := makeData(1024) // 1KiB
-	server := makeHTTPServer(content)
+	server := makeHttptestServer(content)
 	defer server.Close()
 
 	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
@@ -384,6 +392,31 @@ func BenchmarkDo(b *testing.B) {
 	}
 }
 
+func ExampleDo() {
+	// Serve 1KiB of random data.
+	content := makeData(1024) // 1KiB
+	server := makeHttptestServer(content)
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	resp, err := Do(nil, &Request{
+		Request:   req,
+		chunkSize: 64,
+		workers:   8,
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	fmt.Println(resp.ContentLength)
+	// Output: 1024
+}
+
 func makeData(size int) []byte {
 	rnd := rand.New(rand.NewSource(42))
 	content := make([]byte, size)
@@ -391,11 +424,10 @@ func makeData(size int) []byte {
 	return content
 }
 
-func makeHTTPServer(content []byte) *httptest.Server {
-	server := httptest.NewServer(
+func makeHttptestServer(content []byte) *httptest.Server {
+	return httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.ServeContent(w, r, "", time.Now(), bytes.NewReader(content))
 		}),
 	)
-	return server
 }

@@ -118,29 +118,31 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 	}
 
 	requestedRange := r.Header.Get(headerNameRange)
-	chunks, err := ParseRange(requestedRange, contentLength)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"chonker: error parsing requested range %s: %w",
-			requestedRange,
-			err,
-		)
-	}
-
+	var chunks []Chunk
 	headers := probeResp.Header.Clone()
 
-	switch len(chunks) {
-	case 0:
+	if requestedRange == "" {
 		chunks = Chunks(r.chunkSize, 0, contentLength)
-	case 1:
-		cr, ok := chunks[0].ContentRange(contentLength)
+	} else {
+		// The original request had a Range header.
+		// Fetch the requested range.
+		// Add the Content-Range header to the generated response.
+		var err error
+		if chunks, err = ParseRange(requestedRange, contentLength); err != nil {
+			return nil, fmt.Errorf(
+				"chonker: error parsing requested range %s: %w",
+				requestedRange,
+				err,
+			)
+		} else if len(chunks) > 1 {
+			return nil, ErrMultipleRangesUnsupported
+		}
+		cr, ok := chunks[0].ContentRangeHeader(contentLength)
 		if !ok {
 			return nil, errors.New("chonker: unable to generate Content-Range header")
 		}
 		headers.Set(headerNameContentRange, cr)
 		contentLength = chunks[0].Length
-	default:
-		return nil, ErrMultipleRangesUnsupported
 	}
 
 	read, write := io.Pipe()

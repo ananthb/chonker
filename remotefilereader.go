@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync/atomic"
+	"time"
 
 	"github.com/sourcegraph/conc/stream"
 )
@@ -32,6 +34,14 @@ func (r *remoteFileReader) fetchChunks(
 	fetchers *stream.Stream,
 	writer *io.PipeWriter,
 ) {
+	// Update metrics
+	start := time.Now()
+	downloadedBytes := atomic.Int64{}
+	m := getOrCreateHostMetrics(r.request.URL.Host)
+	defer m.requestDurationSeconds.UpdateDuration(start)
+	defer m.requestSizeBytes.Update(float64(downloadedBytes.Load()))
+	defer m.requestsTotal.Inc()
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {
@@ -42,7 +52,7 @@ func (r *remoteFileReader) fetchChunks(
 
 	for _, chunk := range chunks {
 		req := r.request.Clone(ctx)
-		rangeHeader, ok := chunk.Range()
+		rangeHeader, ok := chunk.RangeHeader()
 		if !ok {
 			writer.CloseWithError(
 				fmt.Errorf("chonker: unable to generate Range header for %#v", chunk),
@@ -51,31 +61,35 @@ func (r *remoteFileReader) fetchChunks(
 		}
 		req.Header.Set(headerNameRange, rangeHeader)
 		fetchers.Go(func() stream.Callback {
+			chunkStart := time.Now()
 			resp, err := r.client.Do(req) //nolint:bodyclose
-			// Chunk download goroutine.
 			return func() {
 				if err != nil {
+					cancel()
 					if !errors.Is(err, context.Canceled) {
 						writer.CloseWithError(err)
 					}
-					cancel()
 					return
 				}
 				defer resp.Body.Close()
 				if resp.StatusCode != http.StatusPartialContent {
+					cancel()
 					writer.CloseWithError(fmt.Errorf("%w fetching range %s, got status %s",
 						ErrRangeUnsupported, rangeHeader, resp.Status))
-					cancel()
 					return
 				}
-				if _, err := io.Copy(writer, resp.Body); err != nil {
-					if !(errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe)) {
+				n, err := io.Copy(writer, resp.Body)
+				if err != nil {
+					cancel()
+					if !errors.Is(err, context.Canceled) && !errors.Is(err, io.ErrClosedPipe) {
 						writer.CloseWithError(err)
 						return
 					}
-					cancel()
-					return
 				}
+				// Update chunk metrics
+				m.requestChunkDurationSeconds.UpdateDuration(chunkStart)
+				m.requestChunkSizeBytes.Update(float64(n))
+				downloadedBytes.Add(n)
 			}
 		})
 	}
