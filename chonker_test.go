@@ -392,13 +392,17 @@ func BenchmarkDo(b *testing.B) {
 	}
 }
 
-func ExampleDo() {
-	// Serve 1KiB of random data.
-	content := makeData(1024) // 1KiB
-	server := makeHttptestServer(content)
-	defer server.Close()
+func ExampleNewRequest() {
+	req, err := NewRequest(http.MethodGet, "http://example.com", nil, 64, 8)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(req.URL)
+	// Output: http://example.com
+}
 
-	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+func ExampleDo() {
+	req, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -412,9 +416,35 @@ func ExampleDo() {
 		panic(err)
 	}
 	defer resp.Body.Close()
+}
 
-	fmt.Println(resp.ContentLength)
-	// Output: 1024
+func ExampleNewRoundTripper() {
+	transport, err := NewRoundTripper(nil, 64, 8)
+	if err != nil {
+		panic(err)
+	}
+
+	// Use the transport with a http.Client.
+	client := &http.Client{Transport: transport}
+	resp, err := client.Get("http://example.com")
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+}
+
+func ExampleNewClient() {
+	client, err := NewClient(nil, 64, 8)
+	if err != nil {
+		panic(err)
+	}
+
+	// Use the client.
+	resp, err := client.Get("http://example.com")
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
 }
 
 func makeData(size int) []byte {

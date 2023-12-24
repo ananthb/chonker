@@ -11,6 +11,20 @@ var (
 	// StatsForNerds exposes Prometheus metrics for chonker requests.
 	// Metric names are prefixed with "chonker_".
 	// Metrics are labeled with and grouped by request host URL.
+	//
+	// For example, the following metrics are exposed for a request to
+	// https://example.com:
+	//
+	// chonker_http_requests_total{host="example.com"}
+	// chonker_http_request_duration_seconds{host="example.com"}
+	// chonker_http_request_size_bytes{host="example.com"}
+	// chonker_http_request_chunk_duration_seconds{host="example.com"}
+	// chonker_http_request_chunk_size_bytes{host="example.com"}
+	//
+	// You can surface these metrics in your application using the
+	// [metrics.RegisterSet] function.
+	//
+	// [metrics.RegisterSet]: https://pkg.go.dev/github.com/VictoriaMetrics/metrics#RegisterSet
 	StatsForNerds = metrics.NewSet()
 
 	hostMetricsMap = sync.Map{}
