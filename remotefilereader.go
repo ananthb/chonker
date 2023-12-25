@@ -37,7 +37,7 @@ func (r *remoteFileReader) fetchChunks(
 	// Update metrics
 	start := time.Now()
 	downloadedBytes := atomic.Int64{}
-	m := getOrCreateHostMetrics(r.request.URL.Host)
+	m := getHostMetrics(r.request.URL.Host)
 	defer m.requestDurationSeconds.UpdateDuration(start)
 	defer m.requestSizeBytes.Update(float64(downloadedBytes.Load()))
 	defer m.requestsTotal.Inc()
