@@ -21,8 +21,8 @@ func TestNewRequestWithContext(t *testing.T) {
 	}
 	testCases := []struct {
 		name     string
-		chunk    int64
-		workers  int
+		chunk    uint64
+		workers  uint
 		expected expected
 	}{
 		{
@@ -283,11 +283,28 @@ func TestDo_HeadRequest(t *testing.T) {
 	assert.Equal(t, int64(len(content)), resp.ContentLength)
 }
 
-func TestDo_InvalidContentLength(t *testing.T) {
+func TestDo_GetNoContentRange(t *testing.T) {
 	server := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Accept-Ranges", "bytes")
 			w.Header().Set("Content-Length", "not a number")
+		}),
+	)
+	defer server.Close()
+
+	req, err := NewRequest(http.MethodGet, server.URL, nil, 64, 8)
+	assert.NoError(t, err)
+
+	_, err = Do(nil, req)
+	assert.Error(t, err)
+}
+
+func TestDo_ProbeInvalidContentRange(t *testing.T) {
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusPartialContent)
+			w.Header().Set("Accept-Ranges", "bytes")
+			w.Header().Set("Content-Range", "not a number")
 		}),
 	)
 	defer server.Close()

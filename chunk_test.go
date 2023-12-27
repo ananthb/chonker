@@ -9,102 +9,79 @@ import (
 
 func TestChunk_RangeHeader(t *testing.T) {
 	tests := []struct {
-		name   string
-		c      Chunk
-		want   string
-		wantOk bool
+		name string
+		c    Chunk
+		want string
 	}{
 		{
 			name: "zero",
 			c:    Chunk{},
+			want: "bytes=0-0",
 		},
 		{
-			name:   "valid range",
-			c:      Chunk{Start: 10, Length: 10},
-			want:   "bytes=10-19",
-			wantOk: true,
+			name: "valid range",
+			c:    Chunk{Start: 10, Length: 10},
+			want: "bytes=10-19",
 		},
 		{
-			name:   "valid range of 1 byte",
-			c:      Chunk{Length: 1},
-			want:   "bytes=0-0",
-			wantOk: true,
-		},
-		{
-			name: "invalid length",
-			c:    Chunk{Start: 10, Length: -10},
-		},
-		{
-			name: "invalid start",
-			c:    Chunk{Start: -10, Length: 10},
+			name: "valid range of 1 byte",
+			c:    Chunk{Length: 1},
+			want: "bytes=0-0",
 		},
 		{
 			name: "zero length",
 			c:    Chunk{Start: 10},
+			want: "bytes=10-10",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := tt.c.RangeHeader()
-			if tt.wantOk {
-				assert.True(t, ok)
-				assert.Equal(t, tt.want, got)
-			} else {
-				assert.False(t, ok)
-			}
+			assert.Equal(t, tt.want, tt.c.RangeHeader())
 		})
 	}
 }
 
 func TestChunk_ContentRangeHeader(t *testing.T) {
 	tests := []struct {
-		name   string
-		c      Chunk
-		size   int64
-		want   string
-		wantOk bool
+		name string
+		c    Chunk
+		size uint64
+		want string
 	}{
 		{
 			name: "zero",
 			c:    Chunk{},
+			want: "bytes */0",
 		},
 		{
 			name: "no length and size",
 			c:    Chunk{Start: 10},
+			want: "bytes */0",
 		},
 		{
-			name:   "unsatisfied range",
-			c:      Chunk{},
-			size:   100,
-			want:   "bytes */100",
-			wantOk: true,
+			name: "unsatisfied range",
+			c:    Chunk{},
+			size: 100,
+			want: "bytes */100",
 		},
 		{
-			name:   "full",
-			c:      Chunk{Start: 0, Length: 100},
-			size:   100,
-			want:   "bytes 0-99/100",
-			wantOk: true,
+			name: "full",
+			c:    Chunk{Start: 0, Length: 100},
+			size: 100,
+			want: "bytes 0-99/100",
 		},
 		{
-			name:   "partial",
-			c:      Chunk{Start: 10, Length: 10},
-			size:   100,
-			want:   "bytes 10-19/100",
-			wantOk: true,
+			name: "partial",
+			c:    Chunk{Start: 10, Length: 10},
+			size: 100,
+			want: "bytes 10-19/100",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := tt.c.ContentRangeHeader(tt.size)
-			if tt.wantOk {
-				assert.True(t, ok)
-				assert.Equal(t, tt.want, got)
-			} else {
-				assert.False(t, ok)
-			}
+			assert.Equal(t, tt.want, tt.c.ContentRangeHeader(tt.size))
 		})
 	}
 }
@@ -112,7 +89,7 @@ func TestChunk_ContentRangeHeader(t *testing.T) {
 var parseRangeTests = []struct {
 	name    string
 	s       string
-	size    int64
+	size    uint64
 	want    []Chunk
 	wantErr bool
 }{
@@ -260,7 +237,7 @@ func FuzzParseRange(f *testing.F) {
 			return
 		}
 		for _, rr := range r {
-			if rr.Start < 0 || rr.Length < 0 {
+			if rr.Start == 0 && rr.Length == 0 {
 				t.Fail()
 			}
 		}
@@ -271,7 +248,7 @@ var parseContentRangeTests = []struct {
 	name    string
 	s       string
 	want    *Chunk
-	size    int64
+	size    uint64
 	wantErr bool
 }{
 	{
@@ -374,7 +351,7 @@ func FuzzParseContentRange(f *testing.F) {
 		if err != nil {
 			return
 		}
-		if r.Start < 0 || r.Length < 0 || sz < 0 {
+		if r.Start == 0 && r.Length == 0 && sz == 0 {
 			t.Fail()
 		}
 	})
@@ -383,9 +360,9 @@ func FuzzParseContentRange(f *testing.F) {
 func TestChunks(t *testing.T) {
 	tests := []struct {
 		name      string
-		chunkSize int64
-		offset    int64
-		length    int64
+		chunkSize uint64
+		offset    uint64
+		length    uint64
 		want      []Chunk
 	}{
 		{

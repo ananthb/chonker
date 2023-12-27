@@ -52,14 +52,7 @@ func (r *remoteFileReader) fetchChunks(
 
 	for _, chunk := range chunks {
 		req := r.request.Clone(ctx)
-		rangeHeader, ok := chunk.RangeHeader()
-		if !ok {
-			writer.CloseWithError(
-				fmt.Errorf("chonker: unable to generate Range header for %#v", chunk),
-			)
-			return
-		}
-		req.Header.Set(headerNameRange, rangeHeader)
+		req.Header.Set(headerNameRange, chunk.RangeHeader())
 		fetchers.Go(func() stream.Callback {
 			chunkStart := time.Now()
 			resp, err := r.client.Do(req) //nolint:bodyclose
@@ -75,7 +68,7 @@ func (r *remoteFileReader) fetchChunks(
 				if resp.StatusCode != http.StatusPartialContent {
 					cancel()
 					writer.CloseWithError(fmt.Errorf("%w fetching range %s, got status %s",
-						ErrRangeUnsupported, rangeHeader, resp.Status))
+						ErrRangeUnsupported, resp.Request.Header.Get(headerNameRange), resp.Status))
 					return
 				}
 				n, err := io.Copy(writer, resp.Body)

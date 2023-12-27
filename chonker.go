@@ -29,8 +29,8 @@ var (
 // Request is a ranged http.Request.
 type Request struct {
 	*http.Request
-	chunkSize int64
-	workers   int
+	chunkSize uint64
+	workers   uint
 }
 
 func (r Request) isValid() bool {
@@ -45,7 +45,7 @@ func NewRequestWithContext(
 	ctx context.Context,
 	method, url string,
 	body io.Reader,
-	chunkSize int64, workers int,
+	chunkSize uint64, workers uint,
 ) (*Request, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
@@ -67,8 +67,8 @@ func NewRequestWithContext(
 func NewRequest(
 	method, url string,
 	body io.Reader,
-	chunkSize int64,
-	workers int,
+	chunkSize uint64,
+	workers uint,
 ) (*Request, error) {
 	return NewRequestWithContext(context.Background(), method, url, body, chunkSize, workers)
 }
@@ -101,8 +101,7 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 	// So we do a GET request for the first byte of the file.
 	probeReq := r.Clone(ctx)
 	probeReq.Method = http.MethodGet
-	firstByteRange, _ := Chunk{0, 1}.RangeHeader()
-	probeReq.Header.Set(headerNameRange, firstByteRange)
+	probeReq.Header.Set(headerNameRange, Chunk{0, 1}.RangeHeader())
 	probeResp, err := c.Do(probeReq)
 	if err != nil {
 		return nil, err
@@ -116,16 +115,17 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("chonker: error parsing Content-Range header %s: %w", crHeader, err)
 	}
-	// Remove the Content-Range header from the response.
-	// We'll add it back later if we are fetching a range.
-	probeResp.Header.Del(headerNameContentRange)
 
 	requestedRange := r.Header.Get(headerNameRange)
 	var chunks []Chunk
-	headers := probeResp.Header.Clone()
 
 	if requestedRange == "" {
 		chunks = Chunks(r.chunkSize, 0, contentLength)
+
+		// Remove partial response status code and Content-Range header from the response.
+		probeResp.Header.Del(headerNameContentRange)
+		probeResp.StatusCode = http.StatusOK
+		probeResp.Status = http.StatusText(http.StatusOK)
 	} else {
 		// The original request had a Range header.
 		// Fetch the requested range.
@@ -140,11 +140,13 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 		} else if len(chunks) > 1 {
 			return nil, ErrMultipleRangesUnsupported
 		}
-		cr, ok := chunks[0].ContentRangeHeader(contentLength)
-		if !ok {
-			return nil, errors.New("chonker: unable to generate Content-Range header")
-		}
-		headers.Set(headerNameContentRange, cr)
+
+		// Add partial response status and Content-Range header to the response.
+		probeResp.Header.Set(headerNameContentRange, chunks[0].ContentRangeHeader(contentLength))
+		probeResp.StatusCode = http.StatusPartialContent
+		probeResp.Status = http.StatusText(http.StatusPartialContent)
+
+		// Set content length to the length of the requested range.
 		contentLength = chunks[0].Length
 	}
 
@@ -166,8 +168,8 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 		TLS:        probeResp.TLS,
 
 		// Synthesised fields.
-		ContentLength: contentLength,
-		Header:        headers,
+		ContentLength: int64(contentLength),
+		Header:        probeResp.Header,
 		Body:          remoteFile,
 		Request:       r.Request,
 	}
@@ -176,7 +178,7 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 
 // NewClient returns a new http.Client configured with a http.RoundTripper transport
 // that fetches requests in chunks.
-func NewClient(c *http.Client, chunkSize int64, workers int) (*http.Client, error) {
+func NewClient(c *http.Client, chunkSize uint64, workers uint) (*http.Client, error) {
 	transport, err := NewRoundTripper(c, chunkSize, workers)
 	if err != nil {
 		return nil, err
@@ -193,7 +195,7 @@ func (r roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 // NewRoundTripper returns a new http.RoundTripper that fetches requests in chunks.
-func NewRoundTripper(c *http.Client, chunkSize int64, workers int) (http.RoundTripper, error) {
+func NewRoundTripper(c *http.Client, chunkSize uint64, workers uint) (http.RoundTripper, error) {
 	if chunkSize < 1 || workers < 1 {
 		return nil, ErrInvalidArgument
 	}

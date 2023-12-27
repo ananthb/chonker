@@ -4,6 +4,8 @@ go 1.21
 
 require (
 	github.com/VictoriaMetrics/metrics v1.29.1
+	github.com/cavaliergopher/grab/v3 v3.0.1
+	github.com/dustin/go-humanize v1.0.1
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.4
 )
