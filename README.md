@@ -61,6 +61,22 @@ or detailed logs. See
 [Heimdall](https://github.com/gojek/heimdall) or [go-retryablehttp](https://github.com/hashicorp/go-retryablehttp)
 for more.
 
+### [Chonk](cmd/chonk)
+
+Chonk is a Go program that uses the chonker library to download a URL into a local
+file. Run `chonk -h` for usage details.
+
+```shell
+go build -o chonk ./cmd/chonk
+
+./chonk https://example.com
+```
+
+### [`test.sh`](test.sh)
+
+`test.sh` is a BASH shell script that exercises the `chonk` program with
+a list of files of varying sizes. Run `test.sh -h` for usage details.
+
 ## License
 
 The Chonker cat illustration is from [Freepik](https://www.freepik.com/free-vector/hand-drawn-fat-cat-cartoon-illustration_58564188.htm)
