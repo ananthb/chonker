@@ -6,7 +6,7 @@
 
 *Download large files as parallel chunks using HTTP Range Requests in Go.*
 
-[![Go](https://github.com/ananthb/chonker/actions/workflows/go.yml/badge.svg)](https://github.com/ananthb/chonker/actions/workflows/go.yml)
+[![CI](https://github.com/ananthb/chonker/actions/workflows/ci.yml/badge.svg)](https://github.com/ananthb/chonker/actions/workflows/ci.yml)
 
 Chonker works on Go 1.19, oldstable, and stable releases.
 
