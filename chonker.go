@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 
 	"github.com/sourcegraph/conc/stream"
 )
@@ -96,26 +95,30 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 
 	ctx := r.Context()
 
+	// Probe the server to see if it supports range requests.
+	// If it does, fetch the requested range.
+	// We'd normally do a HEAD request here, but some servers don't support HEAD requests.
+	// So we do a GET request for the first byte of the file.
 	probeReq := r.Clone(ctx)
-	probeReq.Method = http.MethodHead
-	probeReq.Header.Del(headerNameRange)
+	probeReq.Method = http.MethodGet
+	firstByteRange, _ := Chunk{0, 1}.RangeHeader()
+	probeReq.Header.Set(headerNameRange, firstByteRange)
 	probeResp, err := c.Do(probeReq)
 	if err != nil {
 		return nil, err
 	}
-
-	if ar := probeResp.Header.Get(headerNameAcceptRanges); ar != "bytes" {
-		return nil, fmt.Errorf("%w, Accept-Ranges: %s", ErrRangeUnsupported, ar)
+	if probeResp.StatusCode != http.StatusPartialContent {
+		return nil, fmt.Errorf("%w, status code %d", ErrRangeUnsupported, probeResp.StatusCode)
 	}
 
-	contentLength, err := strconv.ParseInt(probeResp.Header.Get(headerNameContentLength), 10, 64)
+	crHeader := probeResp.Header.Get(headerNameContentRange)
+	_, contentLength, err := ParseContentRange(crHeader)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"chonker: unable to parse Content-Length header %s: %w",
-			probeResp.Header.Get(headerNameContentLength),
-			err,
-		)
+		return nil, fmt.Errorf("chonker: error parsing Content-Range header %s: %w", crHeader, err)
 	}
+	// Remove the Content-Range header from the response.
+	// We'll add it back later if we are fetching a range.
+	probeResp.Header.Del(headerNameContentRange)
 
 	requestedRange := r.Header.Get(headerNameRange)
 	var chunks []Chunk

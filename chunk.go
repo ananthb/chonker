@@ -143,6 +143,7 @@ func ParseRange(s string, size int64) ([]Chunk, error) {
 }
 
 // ParseContentRange parses a Content-Range header string as per [RFC 7233].
+// It returns the chunk describing the returned content range, and the size of the content.
 // ErrUnsatisfiedRange is returned if the range is not satisfied.
 //
 // [RFC 7233]: https://tools.ietf.org/html/rfc7233#section-4.2

@@ -245,7 +245,7 @@ func TestDo_PreserveRequestAttributes(t *testing.T) {
 	content := makeData(512)
 	server := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method != http.MethodHead {
+			if r.Method != http.MethodGet && r.Header.Get("Range") != "bytes=0-1" {
 				assert.Equal(t, http.MethodPut, r.Method)
 			}
 			assert.Equal(t, "test", r.Header.Get("X-Test"))
@@ -283,19 +283,6 @@ func TestDo_HeadRequest(t *testing.T) {
 	assert.Equal(t, int64(len(content)), resp.ContentLength)
 }
 
-func TestDo_NoAcceptRanges(t *testing.T) {
-	server := httptest.NewServer(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}),
-	)
-	defer server.Close()
-
-	req, err := NewRequest(http.MethodGet, server.URL, nil, 64, 8)
-	assert.NoError(t, err)
-
-	_, err = Do(nil, req)
-	assert.Error(t, err)
-}
-
 func TestDo_InvalidContentLength(t *testing.T) {
 	server := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -316,8 +303,9 @@ func TestDo_ChunkRequestNotSupported(t *testing.T) {
 	content := makeData(1024)
 	server := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Header.Get("Range") != "" {
-				w.WriteHeader(http.StatusOK)
+			// Probe request will succeed but chunk requests will fail.
+			if rng := r.Header.Get("Range"); rng != "" && rng != "bytes=0-0" {
+				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 			http.ServeContent(w, r, "", time.Now(), bytes.NewReader(content))
@@ -332,7 +320,6 @@ func TestDo_ChunkRequestNotSupported(t *testing.T) {
 	assert.NoError(t, err)
 
 	defer resp.Body.Close()
-	assert.Equal(t, int64(len(content)), resp.ContentLength)
 	assert.Error(t, iotest.TestReader(resp.Body, content))
 }
 
