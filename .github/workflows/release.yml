@@ -67,7 +67,7 @@ jobs:
         uses: actions/download-artifact@v4
 
       - name: Run download test
-        run: 
+        run: |
           export CHONK=./bin/chonk_linux_amd64
           chmod +x "$CHONK"
           bash test.sh
