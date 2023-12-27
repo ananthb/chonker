@@ -6,6 +6,15 @@
 
 set -euo pipefail
 
+chonk=${CHONK:-}
+if [[ -z $chonk ]]; then
+	chonk="$(command -v chonk || true)"
+fi
+if [[ -z $chonk ]]; then
+	printf 'chonk not found\nSet CHONK environment variable to the path of chonk binary\n'
+	exit 1
+fi
+
 # Download file list to tmp folder
 
 test_files_index=$(mktemp)
@@ -59,4 +68,4 @@ done
 
 printf 'Testing chonk with %s URLs\n\n' "${#download_urls[@]}"
 
-xargs -n 1 ./bin/chonk -out /dev/null < <(printf '%s\n' "${download_urls[@]}")
+xargs -n 1 "$chonk" -c 16MiB -o /dev/null < <(printf '%s\n' "${download_urls[@]}")
