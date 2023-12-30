@@ -80,6 +80,7 @@ func (r *remoteFileReader) fetchChunks(
 					}
 				}
 				// Update chunk metrics
+				m := getHostMetrics(r.request.URL.Host)
 				m.requestChunkDurationSeconds.UpdateDuration(chunkStart)
 				m.requestChunkSizeBytes.Update(float64(n))
 				downloadedBytes.Add(n)
