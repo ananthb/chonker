@@ -72,13 +72,13 @@ func getHostMetrics(host string) *hostMetrics {
 			fmt.Sprintf(`chonker_http_request_chunk_size_bytes{host="%s"}`, host),
 		),
 	}
-	_ = metrics.NewGauge(
+	_ = StatsForNerds.NewGauge(
 		fmt.Sprintf(`chonker_http_requests_active{host="%s"}`, host),
 		func() float64 {
 			return float64(hm.requestsActive.Load())
 		},
 	)
-	_ = metrics.NewGauge(
+	_ = StatsForNerds.NewGauge(
 		fmt.Sprintf(`chonker_http_request_chunks_active{host="%s"}`, host),
 		func() float64 {
 			return float64(hm.requestChunksActive.Load())
