@@ -84,8 +84,8 @@ func (r *remoteFileReader) fetchChunks(
 					cancel()
 					if !errors.Is(err, context.Canceled) && !errors.Is(err, io.ErrClosedPipe) {
 						writer.CloseWithError(err)
-						return
 					}
+					return
 				}
 
 				m.requestChunkSizeBytes.Update(float64(n))
