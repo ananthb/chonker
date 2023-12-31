@@ -149,7 +149,7 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 
 		// Set content length to the length of the requested range.
 		contentLength = requestedRange.Length
-		chunks = Chunks(r.chunkSize, requestedRange.Start, requestedRange.Length)
+		chunks = Chunks(r.chunkSize, requestedRange.Start, requestedRange.Start+requestedRange.Length)
 	}
 
 	read, write := io.Pipe()

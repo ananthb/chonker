@@ -195,13 +195,13 @@ func index(chunkSize, offset uint64) uint64 {
 	return offset / chunkSize
 }
 
-// Chunks divides the range [offset, length) into chunks of size chunkSize.
-func Chunks(chunkSize, offset, length uint64) []Chunk {
+// Chunks divides the range [offset, size) into chunks of size chunkSize.
+func Chunks(chunkSize, offset, size uint64) []Chunk {
 	ranges := make([]Chunk, 0)
-	for i := index(chunkSize, offset) * chunkSize; i < length; i += chunkSize {
+	for i := index(chunkSize, offset) * chunkSize; i < size; i += chunkSize {
 		c := Chunk{
 			Start:  i,
-			Length: min(chunkSize, length-i),
+			Length: min(chunkSize, size-i),
 		}
 		// If the first chunk is offset, nudge it to the right.
 		if len(ranges) == 0 {
