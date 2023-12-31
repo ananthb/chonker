@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"log"
+	"fmt"
 	"os"
 	"time"
 
@@ -32,7 +32,8 @@ func main() {
 
 	csize, err := humanize.ParseBytes(chunkSize)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	if flag.NArg() != 1 {
@@ -55,11 +56,13 @@ func main() {
 					0644,
 				)
 				if err != nil {
-					log.Fatal(err)
+					fmt.Println(err)
+					os.Exit(1)
 				}
 				chonker.StatsForNerds.WritePrometheus(mf)
 				if err := mf.Close(); err != nil {
-					log.Fatal(err)
+					fmt.Println(err)
+					os.Exit(1)
 				}
 			}
 		}()
@@ -67,7 +70,8 @@ func main() {
 
 	cc, err := chonker.NewClient(nil, csize, workers)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 
 	gc := grab.NewClient()
@@ -75,16 +79,17 @@ func main() {
 
 	req, err := grab.NewRequest(outputFile, url)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	req.IgnoreRemoteTime = true
 
 	resp := gc.Do(req)
 
 	if !quiet {
-		log.Printf("Downloading %s\n", resp.Request.URL())
+		fmt.Printf("Downloading %s\n", resp.Request.URL())
 		if resp.DidResume {
-			log.Printf("Resuming download from (%.2f%%)\n", 100*resp.Progress())
+			fmt.Printf("Resuming download from (%.2f%%)\n", 100*resp.Progress())
 		}
 	}
 
@@ -94,8 +99,8 @@ func main() {
 		defer updateTicker.Stop()
 		go func() {
 			for range updateTicker.C {
-				log.Printf(
-					"Transferred %s/%s (%.2f%%) in %s at %s/s. ETA %s.",
+				fmt.Printf(
+					"\033[2K\rTransferred %s/%s (%.2f%%) in %s at %s/s. ETA %s.",
 					humanize.IBytes(uint64(resp.BytesComplete())),
 					humanize.IBytes(uint64(resp.Size())),
 					100*resp.Progress(),
@@ -111,11 +116,12 @@ func main() {
 	if updateTicker != nil {
 		updateTicker.Stop()
 	}
-	if resp.Err() != nil {
-		log.Fatal(resp.Err())
+	if err := resp.Err(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	} else if !quiet {
-		log.Printf(
-			"Downloaded %s in %s at %s/s.",
+		fmt.Printf(
+			"\033[2K\rDownloaded %s in %s at %s/s.\n",
 			humanize.IBytes(uint64(resp.BytesComplete())),
 			resp.Duration().Round(time.Second),
 			humanize.IBytes(uint64(resp.BytesPerSecond())),
