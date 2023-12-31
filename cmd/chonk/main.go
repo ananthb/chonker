@@ -82,10 +82,9 @@ func main() {
 	resp := gc.Do(req)
 
 	if !quiet {
+		log.Printf("Downloading %s\n", resp.Request.URL())
 		if resp.DidResume {
-			log.Printf("Resuming download from %s...\n", resp.Request.URL())
-		} else {
-			log.Printf("Downloading %s...\n", resp.Request.URL())
+			log.Printf("Resuming download from (%.2f%%)\n", 100*resp.Progress())
 		}
 	}
 
