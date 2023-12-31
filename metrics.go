@@ -3,6 +3,7 @@ package chonker
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/VictoriaMetrics/metrics"
 )
@@ -34,12 +35,12 @@ var (
 )
 
 type hostMetrics struct {
-	requestsActive         *metrics.Gauge
+	requestsActive         atomic.Int64
 	requestsTotal          *metrics.Counter
 	requestDurationSeconds *metrics.Histogram
 	requestSizeBytes       *metrics.Histogram
 
-	requestChunksActive         *metrics.Gauge
+	requestChunksActive         atomic.Int64
 	requestChunksTotal          *metrics.Counter
 	requestChunkDurationSeconds *metrics.Histogram
 	requestChunkSizeBytes       *metrics.Histogram
@@ -52,9 +53,6 @@ func getHostMetrics(host string) *hostMetrics {
 	}
 
 	hm := &hostMetrics{
-		requestsActive: StatsForNerds.NewGauge(
-			fmt.Sprintf(`chonker_http_requests_active{host="%s"}`, host), nil,
-		),
 		requestsTotal: StatsForNerds.NewCounter(
 			fmt.Sprintf(`chonker_http_requests_total{host="%s"}`, host),
 		),
@@ -63,9 +61,6 @@ func getHostMetrics(host string) *hostMetrics {
 		),
 		requestSizeBytes: StatsForNerds.NewHistogram(
 			fmt.Sprintf(`chonker_http_request_size_bytes{host="%s"}`, host),
-		),
-		requestChunksActive: StatsForNerds.NewGauge(
-			fmt.Sprintf(`chonker_http_request_chunks_active{host="%s"}`, host), nil,
 		),
 		requestChunksTotal: StatsForNerds.NewCounter(
 			fmt.Sprintf(`chonker_http_request_chunks_total{host="%s"}`, host),
@@ -77,6 +72,20 @@ func getHostMetrics(host string) *hostMetrics {
 			fmt.Sprintf(`chonker_http_request_chunk_size_bytes{host="%s"}`, host),
 		),
 	}
+
+	_ = StatsForNerds.NewGauge(
+		fmt.Sprintf(`chonker_http_requests_active{host="%s"}`, host),
+		func() float64 {
+			return float64(hm.requestsActive.Load())
+		},
+	)
+	_ = StatsForNerds.NewGauge(
+		fmt.Sprintf(`chonker_http_request_chunks_active{host="%s"}`, host),
+		func() float64 {
+			return float64(hm.requestChunksActive.Load())
+		},
+	)
+
 	hostMetricsMap.Store(host, hm)
 	return hm
 }
