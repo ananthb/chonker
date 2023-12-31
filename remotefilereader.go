@@ -38,8 +38,7 @@ func (r *remoteFileReader) fetchChunks(
 	start := time.Now()
 	downloadedBytes := atomic.Int64{}
 	m := getHostMetrics(r.request.URL.Host)
-	m.requestsActive.Add(1)
-	defer m.requestsActive.Add(-1)
+	m.requestsActive.Set(m.requestsActive.Get() + 1)
 	defer m.requestDurationSeconds.UpdateDuration(start)
 	defer m.requestSizeBytes.Update(float64(downloadedBytes.Load()))
 	defer m.requestsTotal.Inc()
@@ -48,6 +47,7 @@ func (r *remoteFileReader) fetchChunks(
 	defer cancel()
 	go func() {
 		<-ctx.Done()
+		m.requestsActive.Set(m.requestsActive.Get() - 1)
 		writer.Close()
 	}()
 	defer fetchers.Wait()
@@ -60,8 +60,10 @@ func (r *remoteFileReader) fetchChunks(
 			resp, err := r.client.Do(req) //nolint:bodyclose
 			return func() {
 				m := getHostMetrics(r.request.URL.Host)
-				m.requestChunksActive.Add(1)
-				defer m.requestChunksActive.Add(-1)
+				m.requestChunksActive.Set(m.requestChunksActive.Get() + 1)
+				defer func() {
+					m.requestChunksActive.Set(m.requestChunksActive.Get() - 1)
+				}()
 				defer m.requestChunkDurationSeconds.UpdateDuration(chunkStart)
 				defer m.requestChunksTotal.Inc()
 

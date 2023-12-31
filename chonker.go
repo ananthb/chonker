@@ -116,10 +116,10 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 		return nil, fmt.Errorf("chonker: error parsing Content-Range header %s: %w", crHeader, err)
 	}
 
-	requestedRange := r.Header.Get(headerNameRange)
+	reqRangeVal := r.Header.Get(headerNameRange)
 	var chunks []Chunk
 
-	if requestedRange == "" {
+	if reqRangeVal == "" {
 		chunks = Chunks(r.chunkSize, 0, contentLength)
 
 		// Remove partial response status code and Content-Range header from the response.
@@ -130,24 +130,26 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 		// The original request had a Range header.
 		// Fetch the requested range.
 		// Add the Content-Range header to the generated response.
-		var err error
-		if chunks, err = ParseRange(requestedRange, contentLength); err != nil {
+		cs, err := ParseRange(reqRangeVal, contentLength)
+		if err != nil {
 			return nil, fmt.Errorf(
 				"chonker: error parsing requested range %s: %w",
-				requestedRange,
+				reqRangeVal,
 				err,
 			)
-		} else if len(chunks) > 1 {
+		} else if len(cs) > 1 {
 			return nil, ErrMultipleRangesUnsupported
 		}
+		requestedRange := cs[0]
 
 		// Add partial response status and Content-Range header to the response.
-		probeResp.Header.Set(headerNameContentRange, chunks[0].ContentRangeHeader(contentLength))
+		probeResp.Header.Set(headerNameContentRange, requestedRange.ContentRangeHeader(contentLength))
 		probeResp.StatusCode = http.StatusPartialContent
 		probeResp.Status = http.StatusText(http.StatusPartialContent)
 
 		// Set content length to the length of the requested range.
-		contentLength = chunks[0].Length
+		contentLength = requestedRange.Length
+		chunks = Chunks(r.chunkSize, requestedRange.Start, requestedRange.Length)
 	}
 
 	read, write := io.Pipe()
