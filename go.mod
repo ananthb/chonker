@@ -8,6 +8,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.4
+	golang.org/x/term v0.15.0
 )
 
 require (

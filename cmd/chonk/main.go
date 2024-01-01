@@ -9,6 +9,7 @@ import (
 	"github.com/ananthb/chonker"
 	"github.com/cavaliergopher/grab/v3"
 	"github.com/dustin/go-humanize"
+	"golang.org/x/term"
 )
 
 var (
@@ -86,6 +87,7 @@ func main() {
 
 	resp := gc.Do(req)
 
+	isTerm := term.IsTerminal(int(os.Stdout.Fd()))
 	if !quiet {
 		fmt.Printf("Downloading %s\n", resp.Request.URL())
 		if resp.DidResume {
@@ -99,8 +101,12 @@ func main() {
 		defer updateTicker.Stop()
 		go func() {
 			for range updateTicker.C {
+				if isTerm {
+					// Clear the current line
+					fmt.Print("\033[2K\r")
+				}
 				fmt.Printf(
-					"\033[2K\rTransferred %s/%s (%.2f%%) in %s at %s/s. ETA %s.",
+					"Transferred %s/%s (%.2f%%) in %s at %s/s. ETA %s.",
 					humanize.IBytes(uint64(resp.BytesComplete())),
 					humanize.IBytes(uint64(resp.Size())),
 					100*resp.Progress(),
@@ -120,8 +126,11 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	} else if !quiet {
+		if isTerm {
+			fmt.Print("\033[2K\r")
+		}
 		fmt.Printf(
-			"\033[2K\rDownloaded %s in %s at %s/s.\n",
+			"Downloaded %s in %s at %s/s.\n",
 			humanize.IBytes(uint64(resp.BytesComplete())),
 			resp.Duration().Round(time.Second),
 			humanize.IBytes(uint64(resp.BytesPerSecond())),
