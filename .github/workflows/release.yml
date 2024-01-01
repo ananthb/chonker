@@ -16,7 +16,7 @@ jobs:
   build:
     env:
       CGO_ENABLED: 0
-    
+
     name: Build binaries
     runs-on: ubuntu-latest
     steps:
@@ -31,7 +31,10 @@ jobs:
       - name: Build
         run: |
           gobuild() {
-            env GOOS="$1" GOARCH="$2" go build -o bin/chonk_"$1"_"$2"
+            if [ "$1" == "windows" ]; then
+              ext=".exe"
+            fi
+            env GOOS="$1" GOARCH="$2" go build -o bin/chonk_"$1_$2$ext"
           }
           mkdir bin
 
