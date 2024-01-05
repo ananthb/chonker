@@ -13,17 +13,14 @@ var (
 	// Metric names are prefixed with "chonker_".
 	// Metrics are labeled with and grouped by request host URL.
 	//
-	// For example, the following metrics are exposed for a request to
-	// https://example.com:
+	// Rhe following metrics are exposed for a request to https://example.com:
 	//
-	// chonker_http_requests_active{host="example.com"}
+	// chonker_http_requests_fetching{host="example.com"}
 	// chonker_http_requests_total{host="example.com"}
-	// chonker_http_request_duration_seconds{host="example.com"}
-	// chonker_http_request_size_bytes{host="example.com"}
-	// chonker_http_request_chunks_active{host="example.com"}
+	// chonker_http_requests_total{host="example.com",range="false"}
+	// chonker_http_request_chunks_fetching{host="example.com"}
 	// chonker_http_request_chunks_total{host="example.com"}
 	// chonker_http_request_chunk_duration_seconds{host="example.com"}
-	// chonker_http_request_chunk_size_bytes{host="example.com"}
 	//
 	// You can surface these metrics in your application using the
 	// [metrics.RegisterSet] function.
@@ -35,15 +32,21 @@ var (
 )
 
 type hostMetrics struct {
-	requestsActive         atomic.Int64
-	requestsTotal          *metrics.Counter
-	requestDurationSeconds *metrics.Histogram
-	requestSizeBytes       *metrics.Histogram
-
-	requestChunksActive         atomic.Int64
-	requestChunksTotal          *metrics.Counter
+	// requestsFetching is the number of currently active requests to a host.
+	requestsFetching atomic.Int64
+	// requestsTotal is the total number of requests completed to a host.
+	requestsTotal *metrics.Counter
+	// requestsTotalSansRange is the total number of requests completed to a host
+	// that did not use range requests.
+	requestsTotalSansRange *metrics.Counter
+	// requestChunksFetching is the number of currently active chunk request to a host.
+	requestChunksFetching atomic.Int64
+	// requestChunksTotal is the total number of request chunks completed to a host.
+	requestChunksTotal *metrics.Counter
+	// requestChunkDurationSeconds measures the duration of request chunks to a host.
 	requestChunkDurationSeconds *metrics.Histogram
-	requestChunkSizeBytes       *metrics.Histogram
+	// requestChunkBytes measures the number of bytes fetched in request chunks to a host.
+	requestChunkBytes *metrics.Histogram
 }
 
 func getHostMetrics(host string) *hostMetrics {
@@ -56,11 +59,8 @@ func getHostMetrics(host string) *hostMetrics {
 		requestsTotal: StatsForNerds.NewCounter(
 			fmt.Sprintf(`chonker_http_requests_total{host="%s"}`, host),
 		),
-		requestDurationSeconds: StatsForNerds.NewHistogram(
-			fmt.Sprintf(`chonker_http_request_duration_seconds{host="%s"}`, host),
-		),
-		requestSizeBytes: StatsForNerds.NewHistogram(
-			fmt.Sprintf(`chonker_http_request_size_bytes{host="%s"}`, host),
+		requestsTotalSansRange: StatsForNerds.NewCounter(
+			fmt.Sprintf(`chonker_http_requests_total{host="%s",range="false"}`, host),
 		),
 		requestChunksTotal: StatsForNerds.NewCounter(
 			fmt.Sprintf(`chonker_http_request_chunks_total{host="%s"}`, host),
@@ -68,21 +68,21 @@ func getHostMetrics(host string) *hostMetrics {
 		requestChunkDurationSeconds: StatsForNerds.NewHistogram(
 			fmt.Sprintf(`chonker_http_request_chunk_duration_seconds{host="%s"}`, host),
 		),
-		requestChunkSizeBytes: StatsForNerds.NewHistogram(
-			fmt.Sprintf(`chonker_http_request_chunk_size_bytes{host="%s"}`, host),
+		requestChunkBytes: StatsForNerds.NewHistogram(
+			fmt.Sprintf(`chonker_http_request_chunk_bytes{host="%s"}`, host),
 		),
 	}
 
 	_ = StatsForNerds.NewGauge(
 		fmt.Sprintf(`chonker_http_requests_active{host="%s"}`, host),
 		func() float64 {
-			return float64(hm.requestsActive.Load())
+			return float64(hm.requestsFetching.Load())
 		},
 	)
 	_ = StatsForNerds.NewGauge(
 		fmt.Sprintf(`chonker_http_request_chunks_active{host="%s"}`, host),
 		func() float64 {
-			return float64(hm.requestChunksActive.Load())
+			return float64(hm.requestChunksFetching.Load())
 		},
 	)
 

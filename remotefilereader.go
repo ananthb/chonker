@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync/atomic"
 	"time"
 
 	"github.com/sourcegraph/conc/stream"
@@ -35,14 +34,9 @@ func (r *remoteFileReader) fetchChunks(
 	writer *io.PipeWriter,
 ) {
 	// Update metrics
-	start := time.Now()
-	downloadedBytes := atomic.Int64{}
 	m := getHostMetrics(r.request.URL.Host)
-	m.requestsActive.Add(1)
-	defer m.requestsActive.Add(-1)
-	defer m.requestDurationSeconds.UpdateDuration(start)
-	defer m.requestSizeBytes.Update(float64(downloadedBytes.Load()))
-	defer m.requestsTotal.Inc()
+	m.requestsFetching.Add(1)
+	defer m.requestsFetching.Add(-1)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -56,15 +50,16 @@ func (r *remoteFileReader) fetchChunks(
 		req := r.request.Clone(ctx)
 		req.Header.Set(headerNameRange, chunk.RangeHeader())
 		fetchers.Go(func() stream.Callback {
-			m.requestChunksActive.Add(1)
+			m.requestChunksFetching.Add(1)
+			defer m.requestChunksTotal.Inc()
+
 			chunkStart := time.Now()
 			resp, err := r.client.Do(req) //nolint:bodyclose
 
 			return func() {
 				m := getHostMetrics(r.request.URL.Host)
-				defer m.requestChunksActive.Add(-1)
+				defer m.requestChunksFetching.Add(-1)
 				defer m.requestChunkDurationSeconds.UpdateDuration(chunkStart)
-				defer m.requestChunksTotal.Inc()
 
 				if err != nil {
 					cancel()
@@ -88,9 +83,7 @@ func (r *remoteFileReader) fetchChunks(
 					}
 					return
 				}
-
-				m.requestChunkSizeBytes.Update(float64(n))
-				downloadedBytes.Add(n)
+				m.requestChunkBytes.Update(float64(n))
 			}
 		})
 	}

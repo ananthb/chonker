@@ -340,6 +340,28 @@ func TestDo_ChunkRequestNotSupported(t *testing.T) {
 	assert.Error(t, iotest.TestReader(resp.Body, content))
 }
 
+func TestDo_ChunkRequestNotSupportedButSucceedAnyway(t *testing.T) {
+	content := makeData(1024)
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, err := w.Write(content)
+			assert.NoError(t, err)
+		}),
+	)
+	defer server.Close()
+
+	req, err := NewRequest(http.MethodGet, server.URL, nil, 64, 8)
+	assert.NoError(t, err)
+	req = req.WithSucceedRangeUnsupported()
+
+	resp, err := Do(nil, req)
+	assert.NoError(t, err)
+
+	defer resp.Body.Close()
+	assert.NoError(t, iotest.TestReader(resp.Body, content))
+}
+
 func TestNewClient(t *testing.T) {
 	content := makeData(1024 * 10)
 	server := makeHttptestServer(content)

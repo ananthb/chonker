@@ -27,14 +27,27 @@ var (
 )
 
 // Request is a ranged http.Request.
+// It is a wrapper around http.Request that adds support for ranged requests.
+// If the server does not support range requests, the request fails.
+// To succeed even if the server does not support range requests,
+// use WithContinueSansRange.
 type Request struct {
 	*http.Request
 	chunkSize uint64
 	workers   uint
+
+	continueWithoutRange bool
 }
 
 func (r Request) isValid() bool {
 	return r.chunkSize > 0 && r.workers > 0
+}
+
+// WithContinueSansRange configures the Request to continue even if the server does
+// not support range requests. In this case, the request is fetched in a single request.
+func (r *Request) WithContinueSansRange() *Request {
+	r.continueWithoutRange = true
+	return r
 }
 
 // NewRequestWithContext returns a new Request.
@@ -106,6 +119,16 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	hostMetrics := getHostMetrics(r.URL.Host)
+	if r.continueWithoutRange && probeResp.StatusCode == http.StatusOK {
+		// The server does not support range requests.
+		// But we're configured to succeed anyway.
+		// So we return the probe response as-is.
+		hostMetrics.requestsTotalSansRange.Inc()
+		return probeResp, nil
+	}
+
 	if probeResp.StatusCode != http.StatusPartialContent {
 		return nil, fmt.Errorf("%w, status code %d", ErrRangeUnsupported, probeResp.StatusCode)
 	}
@@ -175,6 +198,8 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 		Body:          remoteFile,
 		Request:       r.Request,
 	}
+
+	hostMetrics.requestsTotal.Inc()
 	return &rangeResponse, nil
 }
 
