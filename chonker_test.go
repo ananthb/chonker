@@ -353,7 +353,7 @@ func TestDo_ChunkRequestNotSupportedButSucceedAnyway(t *testing.T) {
 
 	req, err := NewRequest(http.MethodGet, server.URL, nil, 64, 8)
 	assert.NoError(t, err)
-	req = req.WithSucceedRangeUnsupported()
+	req = req.WithContinueSansRange()
 
 	resp, err := Do(nil, req)
 	assert.NoError(t, err)
