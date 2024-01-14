@@ -61,9 +61,11 @@ func (r *remoteFileReader) fetchChunks(
 				m.requestChunksFetchingStageCopy.Add(1)
 				defer m.requestChunksFetchingStageCopy.Add(-1)
 
-				if n, err := copyChunk(writer, resp, err); err != nil {
+				if n, ok, err := copyChunk(writer, resp, err); !ok {
 					cancel()
-					writer.CloseWithError(err)
+					if err != nil {
+						writer.CloseWithError(err)
+					}
 				} else {
 					m.requestChunkDurationSeconds.UpdateDuration(fetchStart)
 					m.requestChunkBytes.Update(float64(n))
@@ -73,24 +75,24 @@ func (r *remoteFileReader) fetchChunks(
 	}
 }
 
-func copyChunk(w io.Writer, resp *http.Response, err error) (int64, error) {
+func copyChunk(w io.Writer, resp *http.Response, err error) (int64, bool, error) {
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			err = nil
+			return 0, false, nil
 		}
-		return 0, err
+		return 0, false, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusPartialContent {
-		return 0, fmt.Errorf("%w fetching range %s, got status %s",
+		return 0, false, fmt.Errorf("%w fetching range %s, got status %s",
 			ErrRangeUnsupported, resp.Request.Header.Get(headerNameRange), resp.Status)
 	}
 	n, err := io.Copy(w, resp.Body)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe) {
-			err = nil
+			return 0, false, nil
 		}
-		return 0, err
+		return 0, false, err
 	}
-	return n, nil
+	return n, true, nil
 }
