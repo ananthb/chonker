@@ -78,7 +78,7 @@ func (r *remoteFileReader) fetchChunks(
 func copyChunk(w io.Writer, resp *http.Response, err error) (int64, bool, error) {
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
-			return 0, false, nil
+			err = nil
 		}
 		return 0, false, err
 	}
@@ -90,7 +90,7 @@ func copyChunk(w io.Writer, resp *http.Response, err error) (int64, bool, error)
 	n, err := io.Copy(w, resp.Body)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe) {
-			return 0, false, nil
+			err = nil
 		}
 		return 0, false, err
 	}
