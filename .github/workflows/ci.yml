@@ -15,8 +15,8 @@ jobs:
   test:
     strategy:
       matrix:
-        go: [ 'stable', 'oldstable', '1.19' ]
-        os: [ ubuntu-latest, macos-latest ]
+        go: ['stable', 'oldstable', '1.19']
+        os: [ubuntu-latest, macos-latest]
 
     name: Lint & test code.
     runs-on: ${{ matrix.os }}
@@ -39,4 +39,3 @@ jobs:
 
       - name: Test
         run: go test -v -race -cover ./...
-

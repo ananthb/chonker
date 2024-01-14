@@ -65,12 +65,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Download binaries
         uses: actions/download-artifact@v4
 
       - name: Run download test
+        env:
+          CHONK: ./bin/chonk_linux_amd64
         run: |
-          export CHONK=./bin/chonk_linux_amd64
           chmod +x "$CHONK"
           bash test.sh

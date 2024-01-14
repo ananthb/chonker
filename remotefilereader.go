@@ -50,41 +50,47 @@ func (r *remoteFileReader) fetchChunks(
 		req := r.request.Clone(ctx)
 		req.Header.Set(headerNameRange, chunk.RangeHeader())
 		fetchers.Go(func() stream.Callback {
-			m.requestChunksFetching.Add(1)
+			m.requestChunksFetchingStageDo.Add(1)
+			defer m.requestChunksFetchingStageDo.Add(-1)
 			defer m.requestChunksTotal.Inc()
 
-			chunkStart := time.Now()
+			fetchStart := time.Now()
 			resp, err := r.client.Do(req) //nolint:bodyclose
 
 			return func() {
-				m := getHostMetrics(r.request.URL.Host)
-				defer m.requestChunksFetching.Add(-1)
-				defer m.requestChunkDurationSeconds.UpdateDuration(chunkStart)
+				m.requestChunksFetchingStageCopy.Add(1)
+				defer m.requestChunksFetchingStageCopy.Add(-1)
 
-				if err != nil {
+				if n, err := copyChunk(writer, resp, err); err != nil {
 					cancel()
-					if !errors.Is(err, context.Canceled) {
-						writer.CloseWithError(err)
-					}
-					return
+					writer.CloseWithError(err)
+				} else {
+					m.requestChunkDurationSeconds.UpdateDuration(fetchStart)
+					m.requestChunkBytes.Update(float64(n))
 				}
-				defer resp.Body.Close()
-				if resp.StatusCode != http.StatusPartialContent {
-					cancel()
-					writer.CloseWithError(fmt.Errorf("%w fetching range %s, got status %s",
-						ErrRangeUnsupported, resp.Request.Header.Get(headerNameRange), resp.Status))
-					return
-				}
-				n, err := io.Copy(writer, resp.Body)
-				if err != nil {
-					cancel()
-					if !errors.Is(err, context.Canceled) && !errors.Is(err, io.ErrClosedPipe) {
-						writer.CloseWithError(err)
-					}
-					return
-				}
-				m.requestChunkBytes.Update(float64(n))
 			}
 		})
 	}
+}
+
+func copyChunk(w io.Writer, resp *http.Response, err error) (int64, error) {
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			err = nil
+		}
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusPartialContent {
+		return 0, fmt.Errorf("%w fetching range %s, got status %s",
+			ErrRangeUnsupported, resp.Request.Header.Get(headerNameRange), resp.Status)
+	}
+	n, err := io.Copy(w, resp.Body)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe) {
+			err = nil
+		}
+		return 0, err
+	}
+	return n, nil
 }

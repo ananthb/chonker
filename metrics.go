@@ -18,9 +18,11 @@ var (
 	// chonker_http_requests_fetching{host="example.com"}
 	// chonker_http_requests_total{host="example.com"}
 	// chonker_http_requests_total{host="example.com",range="false"}
-	// chonker_http_request_chunks_fetching{host="example.com"}
+	// chonker_http_request_chunks_fetching{host="example.com",stage="do"}
+	// chonker_http_request_chunks_fetching{host="example.com",stage="copy"}
 	// chonker_http_request_chunks_total{host="example.com"}
 	// chonker_http_request_chunk_duration_seconds{host="example.com"}
+	// chonker_http_request_chunk_bytes{host="example.com"}
 	//
 	// You can surface these metrics in your application using the
 	// [metrics.RegisterSet] function.
@@ -39,8 +41,9 @@ type hostMetrics struct {
 	// requestsTotalSansRange is the total number of requests completed to a host
 	// that did not use range requests.
 	requestsTotalSansRange *metrics.Counter
-	// requestChunksFetching is the number of currently active chunk request to a host.
-	requestChunksFetching atomic.Int64
+	// requestChunksFetching is the number of currently active request chunks to a host.
+	requestChunksFetchingStageDo   atomic.Int64
+	requestChunksFetchingStageCopy atomic.Int64
 	// requestChunksTotal is the total number of request chunks completed to a host.
 	requestChunksTotal *metrics.Counter
 	// requestChunkDurationSeconds measures the duration of request chunks to a host.
@@ -74,15 +77,21 @@ func getHostMetrics(host string) *hostMetrics {
 	}
 
 	_ = StatsForNerds.NewGauge(
-		fmt.Sprintf(`chonker_http_requests_active{host="%s"}`, host),
+		fmt.Sprintf(`chonker_http_requests_fetching{host="%s"}`, host),
 		func() float64 {
 			return float64(hm.requestsFetching.Load())
 		},
 	)
 	_ = StatsForNerds.NewGauge(
-		fmt.Sprintf(`chonker_http_request_chunks_active{host="%s"}`, host),
+		fmt.Sprintf(`chonker_http_request_chunks_fetching{host="%s",stage="do"}`, host),
 		func() float64 {
-			return float64(hm.requestChunksFetching.Load())
+			return float64(hm.requestChunksFetchingStageDo.Load())
+		},
+	)
+	_ = StatsForNerds.NewGauge(
+		fmt.Sprintf(`chonker_http_request_chunks_fetching{host="%s",stage="copy"}`, host),
+		func() float64 {
+			return float64(hm.requestChunksFetchingStageCopy.Load())
 		},
 	)
 
