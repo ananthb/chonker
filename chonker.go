@@ -43,8 +43,8 @@ func (r Request) isValid() bool {
 	return r.chunkSize > 0 && r.workers > 0
 }
 
-// WithContinueSansRange configures the Request to continue even if the server does
-// not support range requests. In this case, the request is fetched in a single request.
+// WithContinueSansRange configures r to use ranged sub-requests opportunistically.
+// If the server does not support range requests, the request succeeds anyway.
 func (r *Request) WithContinueSansRange() *Request {
 	r.continueWithoutRange = true
 	return r
