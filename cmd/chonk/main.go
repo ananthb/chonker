@@ -22,9 +22,9 @@ var (
 
 func init() {
 	flag.StringVar(&chunkSize, "c", "1MiB", "chunk size (e.g. 1MiB, 1GiB)")
-	flag.StringVar(&metricsFile, "m", "", "prometheus metrics file")
-	flag.StringVar(&outputFile, "o", "", "output file")
-	flag.BoolVar(&quiet, "q", false, "quiet mode")
+	flag.StringVar(&metricsFile, "m", "", "write prometheus metrics to file (default: disabled)")
+	flag.StringVar(&outputFile, "o", "", "output file or directory (default: current directory)")
+	flag.BoolVar(&quiet, "q", false, "quiet")
 	flag.UintVar(&workers, "w", 10, "number of workers")
 }
 
@@ -33,7 +33,7 @@ func main() {
 
 	csize, err := humanize.ParseBytes(chunkSize)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
@@ -45,33 +45,21 @@ func main() {
 	url := flag.Arg(0)
 
 	// Write prometheus metrics periodically
+	var metricsTicker *time.Ticker
 	if metricsFile != "" {
-		metricsTicker := time.NewTicker(5 * time.Second)
+		metricsTicker = time.NewTicker(5 * time.Second)
 		defer metricsTicker.Stop()
 
 		go func() {
 			for range metricsTicker.C {
-				mf, err := os.OpenFile(
-					metricsFile,
-					os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
-					0644,
-				)
-				if err != nil {
-					fmt.Println(err)
-					os.Exit(1)
-				}
-				chonker.StatsForNerds.WritePrometheus(mf)
-				if err := mf.Close(); err != nil {
-					fmt.Println(err)
-					os.Exit(1)
-				}
+				writeMetricsFile(metricsFile)
 			}
 		}()
 	}
 
 	cc, err := chonker.NewClient(nil, csize, workers)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
@@ -80,7 +68,7 @@ func main() {
 
 	req, err := grab.NewRequest(outputFile, url)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	req.IgnoreRemoteTime = true
@@ -122,10 +110,17 @@ func main() {
 	if updateTicker != nil {
 		updateTicker.Stop()
 	}
+	if metricsTicker != nil {
+		metricsTicker.Stop()
+		writeMetricsFile(metricsFile)
+	}
+
 	if err := resp.Err(); err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
-	} else if !quiet {
+	}
+
+	if !quiet {
 		if isTerm {
 			fmt.Print("\033[2K\r")
 		}
@@ -135,5 +130,16 @@ func main() {
 			resp.Duration().Round(time.Second),
 			humanize.IBytes(uint64(resp.BytesPerSecond())),
 		)
+	}
+}
+
+func writeMetricsFile(filename string) {
+	f, err := os.Create(filename)
+	if err != nil {
+		panic(err)
+	}
+	chonker.StatsForNerds.WritePrometheus(f)
+	if err := f.Close(); err != nil {
+		panic(err)
 	}
 }

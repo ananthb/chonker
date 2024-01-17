@@ -121,16 +121,22 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 	}
 
 	hostMetrics := getHostMetrics(r.URL.Host)
-	if r.continueWithoutRange && probeResp.StatusCode == http.StatusOK {
-		// The server does not support range requests.
-		// But we're configured to succeed anyway.
-		// So we return the probe response as-is.
-		hostMetrics.requestsTotalSansRange.Inc()
-		return probeResp, nil
-	}
-
 	if probeResp.StatusCode != http.StatusPartialContent {
-		return nil, fmt.Errorf("%w, status code %d", ErrRangeUnsupported, probeResp.StatusCode)
+		if !r.continueWithoutRange {
+			return nil, fmt.Errorf(
+				"chonker: %w, status code %d",
+				ErrRangeUnsupported,
+				probeResp.StatusCode,
+			)
+		}
+		if probeResp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status code %d", probeResp.StatusCode)
+		}
+
+		// The server does not support range requests but we're configured to continue anyway.
+		// Return the response as-is.
+		hostMetrics.requestsTotal.Inc()
+		return probeResp, nil
 	}
 
 	crHeader := probeResp.Header.Get(headerNameContentRange)
