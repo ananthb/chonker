@@ -283,6 +283,15 @@ func TestDo_HeadRequest(t *testing.T) {
 	assert.Equal(t, int64(len(content)), resp.ContentLength)
 }
 
+func TestDo_MisbehavingServer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	server.Close()
+	req, err := NewRequest(http.MethodGet, server.URL, nil, 64, 8)
+	assert.NoError(t, err)
+	_, err = Do(nil, req)
+	assert.Error(t, err)
+}
+
 func TestDo_GetNoContentRange(t *testing.T) {
 	server := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

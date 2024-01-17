@@ -75,6 +75,11 @@ func (r *remoteFileReader) fetchChunks(
 	}
 }
 
+// copyChunk copies a chunk from the response body to the pipe writer.
+// The first return value is the number of bytes copied.
+// If the second return value is true, copying should continue.
+// If false, copying should stop.
+// The third return value is the error, if any.
 func copyChunk(w io.Writer, resp *http.Response, err error) (int64, bool, error) {
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
