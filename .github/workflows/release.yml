@@ -29,20 +29,8 @@ jobs:
           go-version: stable
 
       - name: Build
-        run: |
-          gobuild() {
-            if [ "$1" == "windows" ]; then
-              ext=".exe"
-            fi
-            env GOOS="$1" GOARCH="$2" go build -o bin/chonk_"$1_$2$ext"
-          }
-          mkdir bin
-
-          gobuild linux amd64
-          gobuild linux arm64
-          gobuild darwin amd64
-          gobuild darwin arm64
-          gobuild windows amd64
+        shell: bash
+        run: build.sh
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
@@ -71,7 +59,8 @@ jobs:
 
       - name: Run download test
         env:
-          CHONK: ./bin/chonk_linux_amd64
+          CHONK: ./chonk
+        shell: bash
         run: |
-          chmod +x "$CHONK"
+          tar xf bin/chonker_linux_amd64.tar.gz
           bash test.sh
