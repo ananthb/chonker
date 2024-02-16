@@ -12,10 +12,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CGO_ENABLED: 0
+
 jobs:
   build:
     env:
-      CGO_ENABLED: 0
       VERSION: ${{ github.event.release.tag_name }}
 
     name: Build binaries
@@ -26,8 +28,6 @@ jobs:
 
       - name: Setup go
         uses: actions/setup-go@v5
-        with:
-          go-version: stable
 
       - name: Build
         shell: bash
@@ -47,24 +47,18 @@ jobs:
           files: bin/*
 
   download_test:
-    needs: build
-
     name: Download files
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download binaries
-        uses: actions/download-artifact@v4
+      - name: Setup go
+        uses: actions/setup-go@v5
 
       - name: Run download test
-        env:
-          CHONK: ./chonk
         shell: bash
-        run: |
-          tar xf bin/chonker_linux_amd64.tar.zst
-          bash test.sh
+        run: test.sh
 
       - name: Update Github release
         uses: softprops/action-gh-release@v1
