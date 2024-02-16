@@ -54,8 +54,10 @@ go tool covdata textfmt -i "$GOCOVERDIR" -o tests/integration-cover-profile.txt
 go tool cover -html=tests/integration-cover-profile.txt -o tests/integration-cover-profile.html
 
 if command -v xdg-open &> /dev/null; then
-	xdg-open tests/*-profile.html
+	xdg-open tests/unit-cover-profile.html
+	xdg-open tests/integration-cover-profile.html
 fi
 if command -v open &> /dev/null; then
-	open tests/*-profile.html
+	open tests/unit-cover-profile.html
+	open tests/integration-cover-profile.html
 fi
