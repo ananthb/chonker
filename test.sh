@@ -14,7 +14,10 @@ export GOCOVERDIR
 mkdir -p "$GOCOVERDIR"
 
 printf 'Unit test coverage\n'
-go test -coverprofile tests/unit-cover-profile.txt -cover -race ./...
+go test -race ./...
+
+export CGO_ENABLED=0
+go test -coverprofile tests/unit-cover-profile.txt -cover ./...
 go tool cover -html=tests/unit-cover-profile.txt -o tests/unit-cover-profile.html
 
 chonk="$(mktemp -d)/chonk"

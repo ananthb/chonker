@@ -30,6 +30,8 @@ gobuild() {
   popd
 }
 
+export CGO_ENABLED=0
+
 gobuild linux amd64
 gobuild linux arm64
 gobuild darwin amd64
