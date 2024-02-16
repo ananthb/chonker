@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/ananthb/chonker"
@@ -13,15 +15,17 @@ import (
 )
 
 var (
-	chunkSize   string
-	metricsFile string
-	outputFile  string
-	quiet       bool
-	workers     uint
+	chunkSize       string
+	continueNoRange bool
+	metricsFile     string
+	outputFile      string
+	quiet           bool
+	workers         uint
 )
 
 func init() {
 	flag.StringVar(&chunkSize, "c", "1MiB", "chunk size (e.g. 1MiB, 1GiB)")
+	flag.BoolVar(&continueNoRange, "continue", false, "continue download without range support")
 	flag.StringVar(&metricsFile, "m", "", "write prometheus metrics to file (default: disabled)")
 	flag.StringVar(&outputFile, "o", "", "output file or directory (default: current directory)")
 	flag.BoolVar(&quiet, "q", false, "quiet")
@@ -33,13 +37,11 @@ func main() {
 
 	csize, err := humanize.ParseBytes(chunkSize)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(err)
 	}
 
 	if flag.NArg() != 1 {
-		flag.Usage()
-		os.Exit(1)
+		exit(err)
 	}
 
 	url := flag.Arg(0)
@@ -59,19 +61,21 @@ func main() {
 
 	cc, err := chonker.NewClient(nil, csize, workers)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(err)
 	}
 
 	gc := grab.NewClient()
 	gc.HTTPClient = cc
 
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
 	req, err := grab.NewRequest(outputFile, url)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(err)
 	}
 	req.IgnoreRemoteTime = true
+	req = req.WithContext(ctx)
 
 	resp := gc.Do(req)
 
@@ -116,8 +120,7 @@ func main() {
 	}
 
 	if err := resp.Err(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		exit(err)
 	}
 
 	if !quiet {
@@ -131,6 +134,13 @@ func main() {
 			humanize.IBytes(uint64(resp.BytesPerSecond())),
 		)
 	}
+}
+
+func exit(msg any) {
+	if !quiet {
+		fmt.Fprintln(os.Stderr, msg)
+	}
+	os.Exit(1)
 }
 
 func writeMetricsFile(filename string) {

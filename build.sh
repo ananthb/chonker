@@ -6,6 +6,7 @@ app="$(basename "$(pwd)")"
 
 go generate -x ./...
 
+rm -rf bin
 mkdir -p bin
 pushd bin
 

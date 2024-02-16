@@ -65,3 +65,8 @@ jobs:
         run: |
           tar xf bin/chonker_linux_amd64.tar.gz
           bash test.sh
+
+      - name: Update Github release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: tests/*profile.html
