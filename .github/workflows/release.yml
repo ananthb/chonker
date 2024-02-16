@@ -62,7 +62,7 @@ jobs:
 
       - name: Run download test
         shell: bash
-        run: test.sh
+        run: ./test.sh
 
       - name: Update Github release
         uses: softprops/action-gh-release@v1
