@@ -63,7 +63,7 @@ jobs:
           CHONK: ./chonk
         shell: bash
         run: |
-          tar xf bin/chonker_linux_amd64.tar.gz
+          tar xf bin/chonker_linux_amd64.tar.zst
           bash test.sh
 
       - name: Update Github release
