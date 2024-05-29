@@ -8,9 +8,9 @@ import (
 
 // StatsForNerds exposes Prometheus metrics for chonker requests.
 // Metric names are prefixed with "chonker_".
-// Metrics are labeled with and grouped by request host URL.
+// Metrics are labeled with request host URLs.
 //
-// Rhe following metrics are exposed for a request to https://example.com:
+// The following metrics are exposed for a request to https://example.com:
 //
 // chonker_http_requests_fetching{host="example.com"}
 // chonker_http_requests_total{host="example.com"}
