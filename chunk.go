@@ -76,6 +76,7 @@ func (c Chunk) ContentRangeHeader(size uint64) string {
 // [parseRange]: https://github.com/golang/go/blob/b4fa5b163df118b35a836bbe5706ac268b4cc14b/src/net/http/fs.go#L956
 func ParseRange(s string, size uint64) ([]Chunk, error) {
 	const b = "bytes="
+
 	if !strings.HasPrefix(s, b) {
 		return nil, ErrInvalidRange
 	}
@@ -91,8 +92,10 @@ func ParseRange(s string, size uint64) ([]Chunk, error) {
 		if i < 0 {
 			return nil, ErrInvalidRange
 		}
+
 		start, end := textproto.TrimString(ra[:i]), textproto.TrimString(ra[i+1:])
 		c := Chunk{}
+
 		if start == "" {
 			// If no start is specified, end specifies the
 			// range start relative to the end of the file,
@@ -122,6 +125,7 @@ func ParseRange(s string, size uint64) ([]Chunk, error) {
 				noOverlap = true
 				continue
 			}
+
 			c.Start = uint64(i)
 			if end == "" {
 				// If no end is specified, range extends to end of the file.
@@ -137,6 +141,7 @@ func ParseRange(s string, size uint64) ([]Chunk, error) {
 				c.Length = uint64(i) - c.Start + 1
 			}
 		}
+
 		chunks = append(chunks, c)
 	}
 	if noOverlap && len(chunks) == 0 {
@@ -168,10 +173,12 @@ func ParseContentRange(s string) (*Chunk, uint64, error) {
 	if b == "*" {
 		return nil, uint64(size), ErrUnsatisfiedRange
 	}
+
 	b, a, ok = strings.Cut(b, "-")
 	if !ok {
 		return nil, 0, ErrInvalidRange
 	}
+
 	start, err := strconv.ParseInt(b, 10, 64)
 	if err != nil {
 		return nil, 0, err
@@ -183,10 +190,12 @@ func ParseContentRange(s string) (*Chunk, uint64, error) {
 	if start > end || end > size {
 		return nil, 0, ErrInvalidRange
 	}
+
 	c := &Chunk{
 		Start:  uint64(start),
 		Length: uint64(end - start + 1),
 	}
+
 	return c, uint64(size), nil
 }
 
@@ -198,6 +207,7 @@ func index(chunkSize, offset uint64) uint64 {
 // Chunks divides the range [offset, size) into chunks of size chunkSize.
 func Chunks(chunkSize, offset, size uint64) []Chunk {
 	ranges := make([]Chunk, 0)
+
 	for i := index(chunkSize, offset) * chunkSize; i < size; i += chunkSize {
 		c := Chunk{
 			Start:  i,
@@ -209,8 +219,10 @@ func Chunks(chunkSize, offset, size uint64) []Chunk {
 			c.Start += nudge
 			c.Length -= nudge
 		}
+
 		ranges = append(ranges, c)
 	}
+
 	return ranges
 }
 

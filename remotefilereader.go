@@ -40,10 +40,12 @@ func (r *remoteFileReader) fetchChunks(
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
 	go func() {
 		<-ctx.Done()
 		writer.Close()
 	}()
+
 	defer fetchers.Wait()
 
 	for _, chunk := range chunks {
@@ -87,7 +89,9 @@ func copyChunk(w io.Writer, resp *http.Response, err error) (int64, bool, error)
 		}
 		return 0, false, err
 	}
+
 	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusPartialContent {
 		return 0, false, fmt.Errorf("%w fetching range %s, got status %s",
 			ErrRangeUnsupported, resp.Request.Header.Get(headerNameRange), resp.Status)
@@ -99,5 +103,6 @@ func copyChunk(w io.Writer, resp *http.Response, err error) (int64, bool, error)
 		}
 		return 0, false, err
 	}
+
 	return n, true, nil
 }
