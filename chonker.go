@@ -43,9 +43,9 @@ func (r Request) isValid() bool {
 	return r.chunkSize > 0 && r.workers > 0
 }
 
-// WithContinueSansRange configures r to use ranged sub-requests opportunistically.
+// WithOpportunisticRange configures r to use ranged sub-requests opportunistically.
 // If the server does not support range requests, the request succeeds anyway.
-func (r *Request) WithContinueSansRange() *Request {
+func (r *Request) WithOpportunisticRange() *Request {
 	r.continueWithoutRange = true
 	return r
 }
