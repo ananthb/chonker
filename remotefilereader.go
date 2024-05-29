@@ -35,8 +35,8 @@ func (r *remoteFileReader) fetchChunks(
 ) {
 	// Update metrics
 	m := getHostMetrics(r.request.URL.Host)
-	m.requestsFetching.Add(1)
-	defer m.requestsFetching.Add(-1)
+	m.requestsFetching.Inc()
+	defer m.requestsFetching.Dec()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -50,16 +50,16 @@ func (r *remoteFileReader) fetchChunks(
 		req := r.request.Clone(ctx)
 		req.Header.Set(headerNameRange, chunk.RangeHeader())
 		fetchers.Go(func() stream.Callback {
-			m.requestChunksFetchingStageDo.Add(1)
-			defer m.requestChunksFetchingStageDo.Add(-1)
+			m.requestChunksFetchingStageDo.Inc()
+			defer m.requestChunksFetchingStageDo.Dec()
 			defer m.requestChunksTotal.Inc()
 
 			fetchStart := time.Now()
 			resp, err := r.client.Do(req) //nolint:bodyclose
 
 			return func() {
-				m.requestChunksFetchingStageCopy.Add(1)
-				defer m.requestChunksFetchingStageCopy.Add(-1)
+				m.requestChunksFetchingStageCopy.Inc()
+				defer m.requestChunksFetchingStageCopy.Dec()
 
 				if n, ok, err := copyChunk(writer, resp, err); !ok {
 					cancel()
