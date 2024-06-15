@@ -79,8 +79,8 @@ func (r *remoteFileReader) fetchChunks(
 
 // copyChunk copies a chunk from the response body to the pipe writer.
 // The first return value is the number of bytes copied.
-// If the second return value is true, copying should continue.
-// If false, copying should stop.
+// If the second return value is true, other copying goroutines can continue.
+// If false, all copying goroutines should stop.
 // The third return value is the error, if any.
 func copyChunk(w io.Writer, resp *http.Response, err error) (int64, bool, error) {
 	if err != nil {
@@ -96,6 +96,7 @@ func copyChunk(w io.Writer, resp *http.Response, err error) (int64, bool, error)
 		return 0, false, fmt.Errorf("%w fetching range %s, got status %s",
 			ErrRangeUnsupported, resp.Request.Header.Get(headerNameRange), resp.Status)
 	}
+
 	n, err := io.Copy(w, resp.Body)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, io.ErrClosedPipe) {
