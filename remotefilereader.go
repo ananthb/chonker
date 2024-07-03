@@ -41,10 +41,9 @@ func (r *remoteFileReader) fetchChunks(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	go func() {
-		<-ctx.Done()
+	context.AfterFunc(ctx, func() {
 		writer.Close()
-	}()
+	})
 
 	defer fetchers.Wait()
 
