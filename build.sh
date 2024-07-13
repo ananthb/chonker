@@ -3,7 +3,7 @@
 set -euo pipefail
 
 app="$(basename "$PWD")"
-version="${1:-$(git rev-parse --short HEAD)}"
+version="${1:-dev}"
 
 env VERSION="$version" go generate -x ./...
 

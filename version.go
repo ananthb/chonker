@@ -1,3 +1,2 @@
 package chonker
-
-const Version = "dev"
+const Version = `dev`
