@@ -11,7 +11,7 @@
 // Configure the version built into chonker by setting the $VERSION
 // environment variable before running go generate.
 //
-//go:generate sh -c "printf 'package chonker\nconst Version = `%s`\n' $VERSION > version.go"
+//go:generate sh -c "printf 'package chonker\n\nconst Version = `%s`\n' $VERSION > version.go"
 package chonker
 
 import (
