@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"time"
 
 	"github.com/ananthb/chonker"
@@ -21,6 +22,7 @@ var (
 	outputFile      string
 	quiet           bool
 	workers         uint
+	version         bool
 )
 
 func init() {
@@ -30,10 +32,26 @@ func init() {
 	flag.StringVar(&outputFile, "o", "", "output file or directory (default: current directory)")
 	flag.BoolVar(&quiet, "q", false, "quiet")
 	flag.UintVar(&workers, "w", 10, "number of workers")
+	flag.BoolVar(&version, "v", false, "print version and exit")
 }
 
 func main() {
 	flag.Parse()
+
+	if version {
+		rev := "unknown"
+		if bi, ok := debug.ReadBuildInfo(); ok {
+			for _, s := range bi.Settings {
+				if s.Key == "vcs.revision" {
+					rev = s.Value
+					break
+				}
+			}
+		}
+
+		fmt.Printf("chonker %s (%s)\n", chonker.Version, rev)
+		return
+	}
 
 	csize, err := humanize.ParseBytes(chunkSize)
 	if err != nil {
@@ -41,7 +59,7 @@ func main() {
 	}
 
 	if flag.NArg() != 1 {
-		exit(err)
+		exit(fmt.Errorf("missing URL"))
 	}
 
 	url := flag.Arg(0)

@@ -14,8 +14,6 @@ concurrency:
 
 jobs:
   build:
-    env:
-      VERSION: ${{ github.event.release.tag_name }}
 
     name: Build binaries
     runs-on: ubuntu-latest
@@ -30,7 +28,7 @@ jobs:
 
       - name: Build
         shell: bash
-        run: ./build.sh
+        run: ./build.sh "${{ github.event.release.tag_name }}"
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4

@@ -7,6 +7,11 @@
 // Chunks are chunkSize bytes long.
 // A maximum of workers chunks are fetched concurrently.
 // If the server does not support range requests, the request fails.
+//
+// Configure the version built into chonker by setting the $VERSION
+// environment variable before running go generate.
+//
+//go:generate sh -c "printf 'package chonker\nconst Version = \"%s\"' $VERSION > version.go"
 package chonker
 
 import (

@@ -2,9 +2,10 @@
 
 set -euo pipefail
 
-app="$(basename "$(pwd)")"
+app="$(basename "$PWD")"
+version="${1:-$(git rev-parse --short HEAD)}"
 
-go generate -x ./...
+env VERSION="$version" go generate -x ./...
 
 rm -rf bin
 mkdir -p bin
@@ -16,15 +17,15 @@ gobuild() {
   env GOOS="$1" GOARCH="$2" go build ../../../cmd/...
   case "$1" in
     "windows")
-      zip ../../"${app}_${1}_${2}".zip ./*.exe
+      zip ../../"${app}_${1}_${2}_${version}".zip ./*.exe
       ;;
     "linux")
       tar -c --zstd --numeric-owner \
-        -f ../../"${app}_${1}_${2}".tar.zst .
+        -f ../../"${app}_${1}_${2}_${version}".tar.zst .
       ;;
     *)
       tar -c --numeric-owner \
-        -f ../../"${app}_${1}_${2}".tar.gz .
+        -f ../../"${app}_${1}_${2}_${version}".tar.gz .
       ;;
   esac
   popd
