@@ -37,7 +37,7 @@ jobs:
           path: bin/*
 
       - name: Update Github release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           append_body: true
           generate_release_notes: true
@@ -60,6 +60,6 @@ jobs:
         run: ./test.sh
 
       - name: Update Github release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: tests/*profile.html
