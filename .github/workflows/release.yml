@@ -1,47 +1,43 @@
-name: Releases
+name: Release
 
 on:
   release:
     types: [created]
-
-permissions:
-  contents: write
-  discussions: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  release:
 
-    name: Build binaries
+    name: Release binaries and container images
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
 
-      - name: Setup go
+    permissions:
+      contents: write
+      packages: write
+      discussions: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
-      - name: Build
-        shell: bash
-        run: ./build.sh "${{ github.event.release.tag_name }}"
-
-      - name: Upload binaries
-        uses: actions/upload-artifact@v4
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
         with:
-          name: bin
-          path: bin/*
-
-      - name: Update Github release
-        uses: softprops/action-gh-release@v2
-        with:
-          append_body: true
-          generate_release_notes: true
-          files: bin/*
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KO_DOCKER_REPO: ghcr.io/${{ github.repository }}
 
   download_test:
     name: Download files
