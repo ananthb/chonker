@@ -207,13 +207,22 @@ func Do(c *http.Client, r *Request) (*http.Response, error) {
 	return &rangeResponse, nil
 }
 
-// NewClient returns a new http.Client configured with a http.RoundTripper transport
-// that fetches requests in chunks.
+// New returns a chonker client with default settings.
+// The client fetches four 1MiB chunks concurrently.
+func New() *http.Client {
+	return &http.Client{
+		Transport: newRoundTripper(nil, 1024*1024, 4),
+	}
+}
+
+// NewClient returns a new http.Client that fetches requests in chunks.
+// The returned client's Transport is a http.RoundTripper from NewRoundTripper.
 func NewClient(c *http.Client, chunkSize uint64, workers uint) (*http.Client, error) {
 	transport, err := NewRoundTripper(c, chunkSize, workers)
 	if err != nil {
 		return nil, err
 	}
+
 	return &http.Client{
 		Transport: transport,
 	}, nil
@@ -230,6 +239,11 @@ func NewRoundTripper(c *http.Client, chunkSize uint64, workers uint) (http.Round
 	if chunkSize < 1 || workers < 1 {
 		return nil, ErrInvalidArgument
 	}
+
+	return newRoundTripper(c, chunkSize, workers), nil
+}
+
+func newRoundTripper(c *http.Client, chunkSize uint64, workers uint) http.RoundTripper {
 	return roundTripper(func(r *http.Request) (*http.Response, error) {
 		req := Request{
 			Request:   r,
@@ -237,5 +251,5 @@ func NewRoundTripper(c *http.Client, chunkSize uint64, workers uint) (http.Round
 			workers:   workers,
 		}
 		return Do(c, &req)
-	}), nil
+	})
 }

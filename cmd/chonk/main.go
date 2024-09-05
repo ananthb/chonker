@@ -32,7 +32,7 @@ func init() {
 	flag.StringVar(&metricsFile, "m", "", "write prometheus metrics to file (default: disabled)")
 	flag.StringVar(&outputFile, "o", "", "output file or directory (default: current directory)")
 	flag.BoolVar(&quiet, "q", false, "quiet")
-	flag.UintVar(&workers, "w", 10, "number of workers")
+	flag.UintVar(&workers, "w", 4, "number of workers")
 	flag.BoolVar(&printVersion, "v", false, "print version and exit")
 }
 
